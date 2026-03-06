@@ -458,6 +458,7 @@ export default function App() {
   // Operation Approve Modal
   const [approveModal, setApproveModal] = useState({ show: false, order: null, startStep: 0 });
   const [showScanner, setShowScanner] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const searchInputRef = useRef(null);
   const closeConfirmDialog = () => setConfirmDialog({ ...EMPTY_CONFIRM_DIALOG });
 
@@ -576,6 +577,32 @@ export default function App() {
     };
   }, [showScanner]);
 
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    const closeDrawerOnEscape = (event) => {
+      if (event.key === 'Escape') setMobileNavOpen(false);
+    };
+    const closeDrawerOnDesktop = () => {
+      if (window.innerWidth >= 768) setMobileNavOpen(false);
+    };
+
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', closeDrawerOnEscape);
+    window.addEventListener('resize', closeDrawerOnDesktop);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', closeDrawerOnEscape);
+      window.removeEventListener('resize', closeDrawerOnDesktop);
+    };
+  }, [mobileNavOpen]);
+
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [viewMode, listFilter]);
+
   // --- Handlers ---
   const handleLogin = (roleId, password) => {
     const newRole = Object.values(ROLES).find(r => r.id === roleId);
@@ -600,6 +627,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    setMobileNavOpen(false);
     setIsLoggedIn(false);
     setCurrentRole(ROLES.ADMIN);
     setViewMode('list');
@@ -825,6 +853,60 @@ export default function App() {
       });
     }).length;
   }, [savedOrders, currentRole, isAdmin, isOperation]);
+
+  const currentRoleLabel = currentRole.label.split(' (')[0];
+  const listTitle =
+    listFilter === 'my_tasks'
+      ? 'ការងាររង់ចាំខ្ញុំ (My Inbox)'
+      : listFilter === 'history'
+        ? 'ប្រវត្តិការងារ (History)'
+        : 'បញ្ជីការកុម្ម៉ង់ (All Orders)';
+  const listDescription =
+    listFilter === 'my_tasks'
+      ? `មាន ${filteredOrders.length} ការងារដែលត្រូវធ្វើ`
+      : 'គ្រប់គ្រងការផលិតទាំងអស់';
+  const mobileViewTitle =
+    viewMode === 'form'
+      ? (orderInfo.poNumber ? `Order ${orderInfo.poNumber}` : 'បង្កើតការកុម្ម៉ង់')
+      : listFilter === 'my_tasks'
+        ? 'ការងារខ្ញុំ'
+        : listFilter === 'history'
+          ? 'ប្រវត្តិ'
+          : 'ការកុម្ម៉ង់ទាំងអស់';
+
+  const getOrderStatusMeta = (order) => {
+    const status = order.orderInfo.status || 'pending_operation';
+    if (status === 'pending_operation') {
+      return {
+        label: 'រង់ចាំ Operation',
+        className: 'bg-purple-50 text-purple-700',
+      };
+    }
+
+    const sData = order.stepsData || {};
+    let lastStepIndex = -1;
+
+    Object.keys(sData).forEach((key) => {
+      const index = parseInt(key, 10);
+      if (Number.isFinite(index)) {
+        lastStepIndex = Math.max(lastStepIndex, index);
+      }
+    });
+
+    if (lastStepIndex === -1) {
+      return {
+        label: 'កំពុងផលិត',
+        className: 'bg-blue-50 text-blue-700',
+      };
+    }
+
+    return {
+      label: STEPS[lastStepIndex]?.label || 'កំពុងដំណើរការ',
+      className: sData[lastStepIndex]?.status === 'completed'
+        ? 'bg-green-50 text-green-700'
+        : 'bg-yellow-50 text-yellow-700',
+    };
+  };
 
   const openReceiveModal = (order, stepIndex) => {
     const sData = order.stepsData || {};
@@ -1060,6 +1142,7 @@ export default function App() {
       setUploadedImages([null]); setImageCount(1);
     }
     setStepsData(order.stepsData || {});
+    setMobileNavOpen(false);
     setViewMode('form');
   };
 
@@ -1081,6 +1164,7 @@ export default function App() {
 
   const handleNewOrder = () => {
     if (!isAdmin) { showNotification("Admin Only", 'warning'); return; }
+    setMobileNavOpen(false);
     setOrderInfo({
       customer: '', phone: '', date: new Date().toISOString().split('T')[0],
       deadline: '', poNumber: getNextPONumber(savedOrders), quantity: 0,
@@ -1147,11 +1231,18 @@ export default function App() {
 
   // --- RENDER MAIN APP ---
   return (
-    <div className="flex h-screen bg-gray-100 font-sans text-gray-800 print:bg-white print:h-auto">
+    <div className="min-h-screen bg-gray-100 font-sans text-gray-800 print:bg-white print:h-auto">
+
+      {mobileNavOpen && !isGeneratingPDF && (
+        <div
+          className="fixed inset-0 z-30 bg-slate-900/40 backdrop-blur-[1px] md:hidden print:hidden"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      )}
 
       {/* --- NOTIFICATION --- */}
       {notification && (
-        <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-lg text-white font-bold flex items-center gap-2 animate-bounce ${notification.type === 'error' ? 'bg-red-500' : notification.type === 'info' ? 'bg-blue-600' : 'bg-green-600'} print:hidden z-50`}>
+        <div className={`fixed top-4 left-1/2 z-50 flex w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 items-center gap-2 rounded-lg px-4 py-3 text-sm font-bold text-white shadow-lg animate-bounce ${notification.type === 'error' ? 'bg-red-500' : notification.type === 'info' ? 'bg-blue-600' : 'bg-green-600'} print:hidden`}>
           {notification.type === 'error' ? <AlertCircle size={20} /> : <CheckCircle size={20} />} {notification.msg}
         </div>
       )}
@@ -1180,7 +1271,7 @@ export default function App() {
                   </select>
                 </div>
               )}
-              <div className="flex gap-3 w-full">
+              <div className="flex w-full flex-col gap-3 sm:flex-row">
                 <button onClick={closeConfirmDialog} className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium">ទេ (No)</button>
                 <button onClick={() => confirmDialog.onConfirm?.(confirmDialog.selectedNextRole)} className={`flex-1 px-4 py-2 text-white rounded-lg font-medium shadow-md ${confirmDialog.isDangerous ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}>បាទ/ចាស (Yes)</button>
               </div>
@@ -1211,7 +1302,7 @@ export default function App() {
                 * ជំហានមុនផ្នែកដែលបានជ្រើសរើស នឹងត្រូវបានរំលង (Skipped)។
               </p>
             </div>
-            <div className="flex gap-2 justify-end">
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button onClick={() => setApproveModal({ show: false, order: null, startStep: 0 })} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded">បោះបង់</button>
               <button onClick={confirmApproveOrder} className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 font-bold">បញ្ជូន (Send)</button>
             </div>
@@ -1239,7 +1330,7 @@ export default function App() {
                   <h4 className="text-xs font-bold text-gray-500 uppercase mb-2">
                     {category === 'male' ? 'ប្រុស (Male)' : category === 'female' ? 'ស្រី (Female)' : category === 'kids_male' ? 'ក្មេងប្រុស (Kids Male)' : 'ក្មេងស្រី (Kids Female)'}
                   </h4>
-                  <div className="grid grid-cols-6 gap-2">
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
                     {receiveModal.sizes[category] && Object.keys(receiveModal.sizes[category]).map(size => (
                       <div key={size} className="flex flex-col">
                         <label className="text-[10px] text-center font-bold mb-1 text-gray-600">{size}</label>
@@ -1251,7 +1342,7 @@ export default function App() {
               ))}
             </div>
 
-            <div className="flex justify-between items-center pt-4 border-t shrink-0">
+            <div className="flex shrink-0 flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
               <div><span className="text-gray-500 text-xs font-bold block">សរុប (Total Received):</span><span className="text-3xl font-bold text-blue-700">{receiveModal.quantity}</span></div>
               <button onClick={confirmReceive} className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-lg font-bold flex items-center gap-2"><CheckCircle size={20} /> យល់ព្រម (Confirm)</button>
             </div>
@@ -1269,11 +1360,15 @@ export default function App() {
         </div>
       )}
 
+      <div className="flex min-h-screen md:h-screen">
       {/* --- SIDEBAR --- */}
-      <aside className={`w-64 bg-white border-r border-gray-200 flex-shrink-0 flex flex-col transition-all duration-300 ${isGeneratingPDF ? 'hidden' : 'print:hidden'}`}>
-        <div className="p-6 border-b border-gray-100 flex items-center gap-3">
+      <aside className={`fixed inset-y-0 left-0 z-40 flex w-[82vw] max-w-xs -translate-x-full flex-col border-r border-gray-200 bg-white transition-transform duration-300 md:static md:z-auto md:w-64 md:max-w-none md:translate-x-0 ${mobileNavOpen && !isGeneratingPDF ? 'translate-x-0 shadow-2xl' : ''} ${isGeneratingPDF ? 'hidden' : 'print:hidden'}`}>
+        <div className="flex items-center gap-3 border-b border-gray-100 p-4 md:p-6">
           <div className="bg-blue-600 p-2 rounded-lg text-white"><Shirt size={24} /></div>
-          <div><h1 className="font-bold text-lg text-blue-900 leading-tight">ប្រព័ន្ធផលិត</h1><p className="text-xs text-gray-500">T-Shirt Manager</p></div>
+          <div className="min-w-0 flex-1"><h1 className="truncate font-bold text-lg text-blue-900 leading-tight">ប្រព័ន្ធផលិត</h1><p className="text-xs text-gray-500">T-Shirt Manager</p></div>
+          <button onClick={() => setMobileNavOpen(false)} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 md:hidden">
+            <X size={18} />
+          </button>
         </div>
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
           <button onClick={() => { setViewMode('list'); setListFilter('all'); }} className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${viewMode === 'list' && listFilter === 'all' ? 'bg-blue-50 text-blue-700 font-medium shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}><div className="flex items-center gap-3"><Home size={20} /> <span>ទាំងអស់</span></div></button>
@@ -1281,30 +1376,103 @@ export default function App() {
           <button onClick={() => { setViewMode('list'); setListFilter('history'); }} className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${viewMode === 'list' && listFilter === 'history' ? 'bg-blue-50 text-blue-700 font-medium shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}><div className="flex items-center gap-3"><History size={20} /> <span>ប្រវត្តិ {isAdmin && "(ចប់រួចរាល់)"}</span></div></button>
           {isAdmin && <button onClick={handleNewOrder} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${viewMode === 'form' && !orderInfo.id ? 'bg-blue-50 text-blue-700 font-medium shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}><PlusCircle size={20} /><span>បង្កើតថ្មី</span></button>}
         </nav>
-        <div className="p-4 border-t border-gray-100 bg-gray-50">
-          <div className="flex items-center gap-3 mb-3"><div className="bg-blue-100 p-2 rounded-full text-blue-600"><User size={20} /></div><div><p className="text-sm font-bold text-gray-800">{currentRole.label.split(' ')[0]}</p><p className="text-[10px] text-green-600 flex items-center gap-1">● Online</p></div></div>
-          <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 bg-white border border-red-200 text-red-600 py-2 rounded-lg hover:bg-red-50 transition text-sm font-medium"><LogOut size={16} /> ចាកចេញ (Logout)</button>
+        <div className="border-t border-gray-100 bg-gray-50 p-4">
+          <div className="mb-3 flex items-center gap-3"><div className="bg-blue-100 p-2 rounded-full text-blue-600"><User size={20} /></div><div><p className="text-sm font-bold text-gray-800">{currentRoleLabel}</p><p className="text-[10px] text-green-600 flex items-center gap-1">● Online</p></div></div>
+          <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white py-2 text-sm font-medium text-red-600 transition hover:bg-red-50"><LogOut size={16} /> ចាកចេញ (Logout)</button>
         </div>
       </aside>
 
+        <div className="flex min-h-screen flex-1 flex-col md:h-screen">
+          {!isGeneratingPDF && (
+            <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-gray-200 bg-white/95 px-4 py-3 backdrop-blur md:hidden print:hidden">
+              <button onClick={() => setMobileNavOpen(true)} className="rounded-xl border border-gray-200 bg-white p-2.5 text-gray-700 shadow-sm">
+                <Menu size={18} />
+              </button>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold text-gray-900">{mobileViewTitle}</p>
+                <p className="text-[11px] text-gray-500">{currentRoleLabel}</p>
+              </div>
+              {!isAdmin && viewMode === 'list' && pendingTasksCount > 0 && (
+                <span className="rounded-full bg-red-500 px-2.5 py-1 text-xs font-bold text-white">{pendingTasksCount}</span>
+              )}
+            </header>
+          )}
+
       {/* --- MAIN CONTENT --- */}
-      <main className={`flex-1 overflow-y-auto overflow-x-hidden bg-gray-50 ${isGeneratingPDF ? 'p-0 bg-white' : 'p-6 print:p-0 print:bg-white'}`}>
+      <main className={`flex-1 overflow-y-auto overflow-x-hidden bg-gray-50 ${isGeneratingPDF ? 'p-0 bg-white' : 'px-4 py-4 sm:px-5 md:p-6 print:p-0 print:bg-white'}`}>
         {/* LIST VIEW */}
         {viewMode === 'list' && (
           <div className="max-w-6xl mx-auto space-y-6 print:hidden">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
-                <h2 className="text-2xl font-bold text-gray-800">{listFilter === 'my_tasks' ? 'ការងាររង់ចាំខ្ញុំ (My Inbox)' : listFilter === 'history' ? 'ប្រវត្តិការងារ (History)' : 'បញ្ជីការកុម្ម៉ង់ (All Orders)'}</h2>
-                <p className="text-sm text-gray-500 mt-1">{listFilter === 'my_tasks' ? `មាន ${filteredOrders.length} ការងារដែលត្រូវធ្វើ` : 'គ្រប់គ្រងការផលិតទាំងអស់'}</p>
+                <h2 className="text-xl font-bold text-gray-800 md:text-2xl">{listTitle}</h2>
+                <p className="mt-1 text-sm text-gray-500">{listDescription}</p>
               </div>
-              <div className="relative w-72">
+              <div className="relative w-full md:w-72">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
                 <input ref={searchInputRef} type="text" placeholder="ស្វែងរក / Scan QR..." className="w-full pl-10 p-2.5 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none shadow-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} autoFocus />
                 <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 cursor-pointer hover:text-blue-500 transition" onClick={() => setShowScanner(true)}><ScanLine size={16} /></div>
               </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="space-y-3 md:hidden">
+              {filteredOrders.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-10 text-center text-sm italic text-gray-400">
+                  មិនទាន់មាន Order
+                </div>
+              ) : filteredOrders.map((order) => {
+                const statusMeta = getOrderStatusMeta(order);
+                return (
+                  <div key={order.id} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleLoad(order)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          handleLoad(order);
+                        }
+                      }}
+                      className="cursor-pointer"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">PO Number</p>
+                          <p className="truncate font-mono text-lg font-bold text-blue-700">{order.orderInfo.poNumber}</p>
+                        </div>
+                        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${statusMeta.className}`}>{statusMeta.label}</span>
+                      </div>
+                      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <p className="text-[11px] uppercase tracking-wide text-gray-400">Customer</p>
+                          <p className="font-medium text-gray-900">{order.orderInfo.customer || '-'}</p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] uppercase tracking-wide text-gray-400">Quantity</p>
+                          <p className="font-bold text-gray-900">{order.orderInfo.quantity} pcs</p>
+                        </div>
+                        <div className="col-span-2">
+                          <p className="text-[11px] uppercase tracking-wide text-gray-400">Deadline</p>
+                          <p className="font-medium text-gray-900">{order.orderInfo.deadline || '-'}</p>
+                        </div>
+                      </div>
+                      <div className="mt-4 text-xs font-medium text-blue-600">ចុចដើម្បីបើកព័ត៌មានលម្អិត</div>
+                    </div>
+                    {isAdmin && (
+                      <div className="mt-4 border-t border-gray-100 pt-4">
+                        <button onClick={(e) => handleDelete(order.id, e)} className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-100">
+                          <Trash2 size={16} />
+                          លុប Order
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm md:block">
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
                   <thead className="bg-gray-50 text-gray-500 text-xs uppercase font-semibold border-b border-gray-200">
@@ -1379,17 +1547,17 @@ export default function App() {
         {viewMode === 'form' && (
           <div className="max-w-7xl mx-auto animate-in fade-in duration-300">
             {/* Action Bar */}
-            <div className={`flex justify-between items-center mb-6 ${isGeneratingPDF ? 'hidden' : 'print:hidden'}`}>
-              <div className="flex items-center gap-3">
+            <div className={`mb-6 flex flex-col gap-3 ${isGeneratingPDF ? 'hidden' : 'print:hidden'} sm:flex-row sm:items-start sm:justify-between`}>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 <button onClick={() => setViewMode('list')} className="p-2 hover:bg-gray-200 rounded-full transition"><ArrowLeft size={20} /></button>
-                <h2 className="text-2xl font-bold text-gray-800">{orderInfo.poNumber ? `Order: ${orderInfo.poNumber}` : 'ការកុម្ម៉ង់ថ្មី'}</h2>
-                {orderInfo.status === 'pending_operation' && <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-sm font-bold flex items-center gap-1"><Lock size={12} /> Pending Operation</span>}
-                {orderInfo.status === 'production' && <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-sm font-bold flex items-center gap-1"><RefreshCw size={12} /> In Production</span>}
+                <h2 className="text-lg font-bold text-gray-800 sm:text-2xl">{orderInfo.poNumber ? `Order: ${orderInfo.poNumber}` : 'ការកុម្ម៉ង់ថ្មី'}</h2>
+                {orderInfo.status === 'pending_operation' && <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs sm:text-sm font-bold flex items-center gap-1"><Lock size={12} /> Pending Operation</span>}
+                {orderInfo.status === 'production' && <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs sm:text-sm font-bold flex items-center gap-1"><RefreshCw size={12} /> In Production</span>}
               </div>
-              <div className="flex gap-2">
-                {isOperation && orderInfo.status === 'pending_operation' && (<button onClick={() => openApproveModal({ orderInfo, stepsData })} className="bg-purple-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-purple-700 shadow-sm transition"><Send size={18} /> Approve & Send</button>)}
-                {isAdmin && <button onClick={handleSave} disabled={saving} className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700 shadow-sm transition"><Save size={18} /> Save</button>}
-                <button onClick={handleDownloadPDF} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 shadow-sm transition"><FileDown size={18} /> PDF</button>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                {isOperation && orderInfo.status === 'pending_operation' && (<button onClick={() => openApproveModal({ orderInfo, stepsData })} className="flex w-full items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-white shadow-sm transition hover:bg-purple-700 sm:w-auto"><Send size={18} /> Approve & Send</button>)}
+                {isAdmin && <button onClick={handleSave} disabled={saving} className="flex w-full items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-white shadow-sm transition hover:bg-green-700 sm:w-auto"><Save size={18} /> Save</button>}
+                <button onClick={handleDownloadPDF} className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white shadow-sm transition hover:bg-blue-700 sm:w-auto"><FileDown size={18} /> PDF</button>
               </div>
             </div>
 
@@ -1417,19 +1585,19 @@ export default function App() {
               <div className={`grid grid-cols-1 lg:grid-cols-3 gap-6 ${isGeneratingPDF ? 'grid-cols-3 gap-6' : 'print:grid-cols-3 print:gap-6'}`}>
                 <div className={`lg:col-span-1 space-y-6 ${isGeneratingPDF ? 'col-span-1' : 'print:col-span-1'}`}>
                   {!isGeneratingPDF && (
-                    <section className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 print:hidden">
+                    <section className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm print:hidden sm:p-5">
                       <h2 className="font-semibold text-gray-700 mb-4 flex items-center gap-2 pb-2 border-b"><User size={18} /> ព័ត៌មានអតិថិជន</h2>
                       <div className="space-y-3">
                         <input disabled={!isAdmin} type="text" value={orderInfo.customer} onChange={(e) => setOrderInfo({ ...orderInfo, customer: e.target.value })} className={`w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${!isAdmin ? 'bg-gray-100 text-gray-500 border-gray-200' : 'border-gray-300'}`} placeholder="ឈ្មោះ..." />
                         <input disabled={!isAdmin} type="text" value={orderInfo.phone} onChange={(e) => setOrderInfo({ ...orderInfo, phone: e.target.value })} className={`w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${!isAdmin ? 'bg-gray-100 text-gray-500 border-gray-200' : 'border-gray-300'}`} placeholder="លេខទូរស័ព្ទ..." />
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                           <input disabled={!isAdmin} type="date" value={orderInfo.date} onChange={(e) => setOrderInfo({ ...orderInfo, date: e.target.value })} className={`w-full p-2.5 border rounded-lg outline-none ${!isAdmin ? 'bg-gray-100 text-gray-500 border-gray-200' : 'border-gray-300'}`} />
                           <input disabled={!isAdmin} type="date" value={orderInfo.deadline} onChange={(e) => setOrderInfo({ ...orderInfo, deadline: e.target.value })} className={`w-full p-2.5 border rounded-lg outline-none font-medium ${!isAdmin ? 'bg-gray-100 text-gray-500 border-gray-200' : 'border-red-200 bg-red-50 text-red-600'}`} />
                         </div>
                       </div>
                     </section>
                   )}
-                  <section className={`bg-white p-5 rounded-xl shadow-sm border border-gray-200 ${isGeneratingPDF ? 'break-inside-avoid p-0 border-0 shadow-none' : 'print:break-inside-avoid print:p-0 print:border-0 print:shadow-none'}`}>
+                  <section className={`bg-white p-4 rounded-xl border border-gray-200 shadow-sm sm:p-5 ${isGeneratingPDF ? 'break-inside-avoid p-0 border-0 shadow-none' : 'print:break-inside-avoid print:p-0 print:border-0 print:shadow-none'}`}>
                     <h2 className="font-semibold text-gray-700 mb-4 flex items-center gap-2 pb-2 border-b"><Shirt size={18} /> លក្ខណៈបច្ចេកទេស</h2>
                     <div className="space-y-4 text-sm">
                       <div className="pt-2">
@@ -1443,12 +1611,12 @@ export default function App() {
                       </div>
                     </div>
                   </section>
-                  <section className={`bg-white p-5 rounded-xl shadow-sm border border-gray-200 ${isGeneratingPDF ? 'p-0 border-0 shadow-none mt-4' : 'print:p-0 print:border-0 print:shadow-none print:mt-4'}`}>
+                  <section className={`bg-white p-4 rounded-xl border border-gray-200 shadow-sm sm:p-5 ${isGeneratingPDF ? 'p-0 border-0 shadow-none mt-4' : 'print:p-0 print:border-0 print:shadow-none print:mt-4'}`}>
                     <h2 className="font-semibold text-gray-700 mb-4 flex items-center gap-2 pb-2 border-b"><LayoutList size={18} /> ចំនួន & ទំហំ</h2>
                     {['male', 'female', 'kids_male', 'kids_female'].map(category => (
                       <div key={category} className="mb-3">
                         <h4 className="text-xs font-bold text-gray-500 uppercase mb-2">{category.replace('_', ' ')}</h4>
-                        <div className="grid grid-cols-6 gap-2">
+                        <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
                           {Object.keys(orderInfo.sizes[category]).map(size => (
                             <div key={size} className="flex flex-col">
                               <label className="text-[10px] text-center font-bold mb-1 text-gray-400">{size}</label>
@@ -1464,17 +1632,17 @@ export default function App() {
 
                 {/* RIGHT COLUMN */}
                 <div className={`lg:col-span-2 space-y-6 ${isGeneratingPDF ? 'col-span-2' : 'print:col-span-2'}`}>
-                  <section className={`bg-white p-6 rounded-xl shadow-sm border border-gray-200 ${isGeneratingPDF ? 'shadow-none border-0 p-0' : 'print:shadow-none print:border-0 print:p-0'}`}>
-                    <div className="flex justify-between items-center mb-6">
+                  <section className={`bg-white p-4 rounded-xl border border-gray-200 shadow-sm sm:p-6 ${isGeneratingPDF ? 'shadow-none border-0 p-0' : 'print:shadow-none print:border-0 print:p-0'}`}>
+                    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <h2 className="font-semibold text-gray-700 flex items-center gap-2"><ImageIcon size={18} /> គំរូអាវ</h2>
-                      <div className="flex items-center gap-2 print:hidden">
+                      <div className="flex items-center justify-between gap-2 print:hidden sm:justify-start">
                         <span className="text-sm font-medium text-gray-600">ចំនួនរូបភាព:</span>
                         <select className="border rounded p-1 text-sm outline-none" value={imageCount} onChange={(e) => handleImageCountChange(e.target.value)} disabled={!isAdmin}>{[1, 2, 3, 4].map(n => <option key={n} value={n}>{n}</option>)}</select>
                       </div>
                     </div>
-                    <div className={`grid gap-4 ${imageCount > 1 ? 'grid-cols-2' : 'grid-cols-1'} ${isGeneratingPDF ? '' : 'print:grid'}`}>
+                    <div className={`grid gap-4 ${imageCount > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'} ${isGeneratingPDF ? '' : 'print:grid'}`}>
                       {uploadedImages.map((img, idx) => (
-                        <div key={idx} className={`relative flex flex-col items-center justify-center border border-gray-100 rounded-xl bg-gray-50 ${isGeneratingPDF ? 'border-0 bg-transparent' : 'print:border-0 print:bg-transparent'} h-64 overflow-hidden`}>
+                        <div key={idx} className={`relative flex h-56 flex-col items-center justify-center overflow-hidden rounded-xl border border-gray-100 bg-gray-50 sm:h-64 ${isGeneratingPDF ? 'border-0 bg-transparent' : 'print:border-0 print:bg-transparent'}`}>
                           {img ? (
                             <>
                               <div className="relative w-full h-full flex items-center justify-center"><img src={img} className="max-h-full max-w-full object-contain p-2" crossOrigin="anonymous" />{!isGeneratingPDF && isAdmin && (<button onClick={() => removeImage(idx)} className="absolute top-2 right-2 p-1 bg-white rounded-full shadow text-red-500 hover:text-red-700 print:hidden"><X size={16} /></button>)}</div>
@@ -1483,7 +1651,7 @@ export default function App() {
                             <>
                               <TShirtMockup uploadedImage={null} color={specs.colorValue} />
                               {!isGeneratingPDF && isAdmin && (
-                                <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer text-gray-400 hover:text-blue-500 transition opacity-0 hover:opacity-100 bg-black/5"><Upload size={32} className="mb-2" /><span className="text-xs font-medium">Upload Image {idx + 1}</span><input type="file" className="hidden" accept="image/*" onChange={(e) => handleImageUpload(e, idx)} /></label>
+                                <label className="absolute inset-0 flex cursor-pointer flex-col items-center justify-center bg-black/5 text-gray-500 opacity-100 transition hover:text-blue-500 md:opacity-0 md:hover:opacity-100"><Upload size={32} className="mb-2" /><span className="text-xs font-medium">Upload Image {idx + 1}</span><input type="file" className="hidden" accept="image/*" onChange={(e) => handleImageUpload(e, idx)} /></label>
                               )}
                             </>
                           )}
@@ -1540,7 +1708,7 @@ export default function App() {
                   </section>
 
                   {!isGeneratingPDF && (
-                    <section className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 print:border-black print:mt-6">
+                    <section className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm print:border-black print:mt-6 sm:p-6">
                       <h2 className="font-semibold text-gray-700 mb-4 flex items-center gap-2 pb-2 border-b"><Clock size={18} /> តាមដានស្ថានភាព (Status)</h2>
                       <div className={`space-y-3 ${orderInfo.status === 'pending_operation' ? 'opacity-50 pointer-events-none' : ''}`}>
                         {STEPS.map((step, index) => {
@@ -1553,14 +1721,14 @@ export default function App() {
                           const ready = isStepReady(index, stepsData, orderInfo.startStep || 0);
 
                           return (
-                            <div key={step.id} className={`flex items-center gap-4 p-3 rounded-lg border transition-all ${status === 'in_progress' ? 'bg-blue-50 border-blue-200 shadow-sm' : status === 'completed' ? 'bg-green-50 border-green-200' : 'bg-white border-gray-100'} print:border-gray-300 print:p-1`}>
+                            <div key={step.id} className={`flex flex-col items-start gap-3 rounded-lg border p-3 transition-all sm:flex-row sm:items-center sm:gap-4 ${status === 'in_progress' ? 'bg-blue-50 border-blue-200 shadow-sm' : status === 'completed' ? 'bg-green-50 border-green-200' : 'bg-white border-gray-100'} print:border-gray-300 print:p-1`}>
                               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white shrink-0 shadow-sm ${status === 'completed' ? 'bg-green-500' : status === 'in_progress' ? 'bg-blue-500 animate-pulse' : 'bg-gray-300'}`}>
                                 {status === 'completed' ? <CheckSquare size={16} /> : <span className="font-bold text-xs">{index + 1}</span>}
                               </div>
-                              <div className="flex-1">
-                                <div className="flex justify-between items-center mb-1">
+                              <div className="flex-1 self-stretch">
+                                <div className="mb-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                   <span className={`font-bold text-sm ${status === 'completed' ? 'text-green-800' : 'text-gray-700'}`}>{step.label}</span>
-                                  <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full print:hidden">{roleName}</span>
+                                  <span className="self-start rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-400 print:hidden">{roleName}</span>
                                 </div>
                                 <div className="flex flex-col gap-1">
                                   <div className="flex items-center gap-2">
@@ -1593,6 +1761,8 @@ export default function App() {
           </div>
         )}
       </main>
+        </div>
+      </div>
     </div>
   );
 }
