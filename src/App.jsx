@@ -227,9 +227,16 @@ const compressImageSourceForFirestore = async (imageSource, targetBytes = DEFAUL
   return compressedImage;
 };
 
+const hasOwnEnvVar = (key) =>
+  typeof import.meta !== 'undefined' &&
+  !!import.meta.env &&
+  Object.prototype.hasOwnProperty.call(import.meta.env, key);
+
 const TELEGRAM_PROXY_URL =
   typeof import.meta !== 'undefined'
-    ? import.meta.env?.VITE_TELEGRAM_PROXY_URL || '/telegram/send'
+    ? hasOwnEnvVar('VITE_TELEGRAM_PROXY_URL')
+      ? String(import.meta.env.VITE_TELEGRAM_PROXY_URL || '').trim()
+      : '/telegram/send'
     : '/telegram/send';
 
 const TELEGRAM_ROLE_CHAT_IDS =

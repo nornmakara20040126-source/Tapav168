@@ -1,45 +1,66 @@
-# React + Vite
+# T-Shirt Production System
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + Vite frontend for the T-shirt production workflow. Data is stored in Firebase. Telegram notifications are optional and require a backend proxy so the bot token is never exposed in the browser.
 
-Currently, two official plugins are available:
+## GitHub Pages
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+This repo now includes a GitHub Pages workflow at `.github/workflows/deploy-pages.yml`.
 
-## React Compiler
+What it does:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- builds the app from the repository root
+- detects the repository name automatically and sets the correct Vite base path
+- deploys the `dist` output to GitHub Pages on every push to `main`
+- disables Telegram by default for the Pages build because GitHub Pages cannot run backend functions
 
-## Expanding the ESLint configuration
+### Enable Pages
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+1. Push this repository to GitHub.
+2. In GitHub, open `Settings -> Pages`.
+3. Set `Source` to `GitHub Actions`.
+4. Push to `main` or run the `Deploy to GitHub Pages` workflow manually.
 
-## Telegram Bot Integration
+For the current remote repository, the expected site URL is:
 
-This project sends Telegram messages through a backend endpoint so bot credentials are not exposed in the frontend.
+`https://nornmakara20040126-source.github.io/Tapav168/`
 
-In production on Netlify, it uses `netlify/functions/telegram-send.mjs` via `/telegram/send`.
+### Important limitation
 
-### 1) Netlify (production)
+GitHub Pages only hosts static files. These files will not run on Pages:
 
-Set these environment variables in Netlify Site Settings -> Environment variables:
+- `server/telegram-proxy.mjs`
+- `netlify/functions/telegram-send.mjs`
 
-- `TELEGRAM_BOT_TOKEN` (required)
-- `TELEGRAM_CHAT_ID` (optional default target chat)
-- `VITE_TELEGRAM_ROLE_CHAT_IDS` (optional JSON map: `roleId -> chat_id`)
+If you want Telegram notifications while hosting the frontend on GitHub Pages, point `VITE_TELEGRAM_PROXY_URL` at an external HTTPS backend you control.
 
-Example:
+Examples:
 
-```env
-VITE_TELEGRAM_ROLE_CHAT_IDS={"admin":"111111111","operation":"222222222","stock":"333333333","cutting":"444444444","qc":"555555555"}
+- Netlify function
+- Render service
+- Cloudflare Worker
+- your own Node server
+
+If you do not provide `VITE_TELEGRAM_PROXY_URL`, the GitHub Pages workflow builds with Telegram disabled.
+
+## Local development
+
+Install dependencies:
+
+```bash
+npm install
 ```
 
-`VITE_TELEGRAM_PROXY_URL` is optional. If not set, the frontend defaults to `/telegram/send`.
+Run the frontend:
 
-### 2) Local development options
+```bash
+npm run dev
+```
 
-Option A: Run with local proxy server:
+## Telegram backend options
+
+### Option A: local Node proxy
+
+Run:
 
 ```bash
 npm run telegram:server
@@ -51,21 +72,30 @@ Then set:
 VITE_TELEGRAM_PROXY_URL=http://localhost:8787/telegram/send
 ```
 
-Option B: Run with Netlify Dev so local function routes work:
+Required backend environment variables:
 
-```bash
-npx netlify dev
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID` (optional default target chat)
+- `VITE_TELEGRAM_ROLE_CHAT_IDS` (optional JSON map from role ID to chat ID)
+
+Example:
+
+```env
+VITE_TELEGRAM_ROLE_CHAT_IDS={"admin":"111111111","operation":"222222222","stock":"333333333","cutting":"444444444","qc":"555555555"}
 ```
 
-### 3) App runtime
+### Option B: Netlify
 
-Run app in normal Vite mode:
+This project already contains Netlify configuration in `netlify.toml`.
 
-```bash
-npm run dev
-```
+Netlify production uses:
 
-When enabled, the app sends Telegram messages for:
+- `netlify/functions/telegram-send.mjs`
+- redirect `/telegram/send -> /.netlify/functions/telegram-send`
+
+## Production notes
+
+Telegram notifications, when enabled, are sent for:
 
 - order saved
 - order approved to production
