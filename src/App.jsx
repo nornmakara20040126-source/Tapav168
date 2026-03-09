@@ -136,6 +136,7 @@ const DEFAULT_SPECS = {
   logoBackSize: '',
   logoColor: '',
   description: '',
+  technicalNotes: '',
 };
 
 const MAX_UPLOAD_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
@@ -1608,6 +1609,15 @@ export default function App() {
                           <textarea disabled={!isAdmin} className={`w-full p-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${!isAdmin ? 'bg-gray-100' : ''}`} rows="5" placeholder="សរសេរលម្អិតពីអាវ (ម៉ូត, ពណ៌, របៀបដេរ...)" value={specs.description} onChange={(e) => setSpecs({ ...specs, description: e.target.value })} />
                         )}
                         <div className="hidden print:block p-2 border rounded text-sm min-h-[60px] whitespace-pre-wrap font-medium">{specs.description}</div>
+                      </div>
+                      <div>
+                        <span className="block text-xs text-gray-400 mb-1">កំណត់ចំណាំបន្ថែម</span>
+                        {isGeneratingPDF ? (
+                          <div className="p-2 border rounded text-sm min-h-[60px] whitespace-pre-wrap font-medium">{specs.technicalNotes}</div>
+                        ) : (
+                          <textarea disabled={!isAdmin} className={`w-full p-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${!isAdmin ? 'bg-gray-100' : ''}`} rows="4" placeholder="សរសេរព័ត៌មានបន្ថែមសម្រាប់ផ្នែកផលិត..." value={specs.technicalNotes} onChange={(e) => setSpecs({ ...specs, technicalNotes: e.target.value })} />
+                        )}
+                        <div className="hidden print:block p-2 border rounded text-sm min-h-[60px] whitespace-pre-wrap font-medium">{specs.technicalNotes}</div>
                       </div>
                     </div>
                   </section>
