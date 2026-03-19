@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "firebase/auth";
-import { getFirestore, doc, setDoc, updateDoc, getDoc, getDocs, collection, onSnapshot, deleteDoc, query, orderBy } from "firebase/firestore";
+import { getFirestore, doc, setDoc, updateDoc, getDoc, collection, onSnapshot, deleteDoc, query, orderBy } from "firebase/firestore";
 
 // =====================================================================
 // ការកំណត់ Firebase និងការសម្អាត App ID ដើម្បីការពារ Error
@@ -40,10 +40,9 @@ const db = getFirestore(app);
 const inferredAppId = firebaseConfig?.appId || firebaseConfig?.projectId || 'default-app-id';
 const rawAppId = typeof __app_id !== 'undefined' && __app_id ? String(__app_id) : inferredAppId;
 const safeAppId = rawAppId.replace(/[^a-zA-Z0-9_-]/g, '-');
-const sharedOrdersCollectionRef = collection(db, 'artifacts', safeAppId, 'public', 'data', 'orders');
-const sharedOrdersCollectionPath = ['artifacts', safeAppId, 'public', 'data', 'orders'].join('/');
-const getSharedOrderDocRef = (poNumber) => doc(sharedOrdersCollectionRef, poNumber);
-const getLegacyOrdersCollectionRef = (uid) => collection(db, 'artifacts', safeAppId, 'users', uid, 'orders');
+const getUserOrdersCollectionRef = (uid) => collection(db, 'artifacts', safeAppId, 'users', uid, 'orders');
+const getUserOrdersCollectionPath = (uid) => ['artifacts', safeAppId, 'users', uid, 'orders'].join('/');
+const getUserOrderDocRef = (uid, poNumber) => doc(db, 'artifacts', safeAppId, 'users', uid, 'orders', poNumber);
 
 // តួនាទីអ្នកប្រើប្រាស់ (User Roles)
 const ROLES = {
@@ -467,7 +466,6 @@ export default function App() {
   const [showScanner, setShowScanner] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const searchInputRef = useRef(null);
-  const migratedLegacyUidsRef = useRef(new Set());
   const closeConfirmDialog = () => setConfirmDialog({ ...EMPTY_CONFIRM_DIALOG });
 
   const [orderInfo, setOrderInfo] = useState({
@@ -535,45 +533,9 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!user?.uid) return;
-    if (migratedLegacyUidsRef.current.has(user.uid)) return;
-
-    migratedLegacyUidsRef.current.add(user.uid);
-
-    const migrateLegacyOrders = async () => {
-      try {
-        const legacyOrdersRef = getLegacyOrdersCollectionRef(user.uid);
-        const [legacySnapshot, sharedSnapshot] = await Promise.all([
-          getDocs(legacyOrdersRef),
-          getDocs(sharedOrdersCollectionRef),
-        ]);
-
-        if (legacySnapshot.empty) return;
-
-        const sharedIds = new Set(sharedSnapshot.docs.map((snapshotDoc) => snapshotDoc.id));
-        const legacyOrdersToCopy = legacySnapshot.docs.filter((snapshotDoc) => !sharedIds.has(snapshotDoc.id));
-
-        if (!legacyOrdersToCopy.length) return;
-
-        await Promise.all(
-          legacyOrdersToCopy.map((snapshotDoc) =>
-            setDoc(getSharedOrderDocRef(snapshotDoc.id), snapshotDoc.data(), { merge: true })
-          )
-        );
-
-        showNotification(`Migrated ${legacyOrdersToCopy.length} old order(s) to the shared database.`, 'info');
-      } catch (error) {
-        console.error('Legacy order migration failed:', error);
-      }
-    };
-
-    void migrateLegacyOrders();
-  }, [user]);
-
-  useEffect(() => {
     if (!user) return;
     // ប្រើ safeAppId ដើម្បីការពារកុំអោយ Error
-    const q = query(sharedOrdersCollectionRef);
+    const q = query(getUserOrdersCollectionRef(user.uid));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       orders.sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
@@ -593,7 +555,7 @@ export default function App() {
     }, (error) => {
       console.error("Error fetching:", error);
       if (error?.code === 'permission-denied') {
-        showNotification(`Read blocked by Firestore rules (permission-denied). path=${sharedOrdersCollectionPath}`, 'error');
+        showNotification(`Read blocked by Firestore rules (permission-denied). path=${getUserOrdersCollectionPath(user.uid)}`, 'error');
       } else {
         showNotification(`Database read failed: ${error?.message || 'Unknown error'}`, 'error');
       }
@@ -814,7 +776,7 @@ export default function App() {
         startStep: parseInt(startStep)
       };
 
-      await setDoc(getSharedOrderDocRef(order.orderInfo.poNumber), {
+      await setDoc(getUserOrderDocRef(user.uid, order.orderInfo.poNumber), {
         ...order,
         orderInfo: updatedOrderInfo
       }, { merge: true });
@@ -1017,7 +979,7 @@ export default function App() {
     setReceiveModal({ show: false, order: null, stepIndex: null, quantity: 0, sizes: {} });
 
     try {
-      await setDoc(getSharedOrderDocRef(order.orderInfo.poNumber), {
+      await setDoc(getUserOrderDocRef(user.uid, order.orderInfo.poNumber), {
         ...order, stepsData: updatedStepsData
       }, { merge: true });
       void sendTelegramToRoles(
@@ -1082,7 +1044,7 @@ export default function App() {
     }
 
     try {
-      await setDoc(getSharedOrderDocRef(order.orderInfo.poNumber), {
+      await setDoc(getUserOrderDocRef(user.uid, order.orderInfo.poNumber), {
         ...order, stepsData: updatedStepsData
       }, { merge: true });
       void sendTelegramToRoles(
@@ -1148,8 +1110,8 @@ export default function App() {
         return;
       }
 
-      const savePath = `${sharedOrdersCollectionPath}/${finalOrderInfo.poNumber}`;
-      await setDoc(getSharedOrderDocRef(finalOrderInfo.poNumber), orderData);
+      const savePath = `${getUserOrdersCollectionPath(user.uid)}/${finalOrderInfo.poNumber}`;
+      await setDoc(getUserOrderDocRef(user.uid, finalOrderInfo.poNumber), orderData);
       console.log("Saved to:", savePath);
       void sendTelegramToRoles(
         [currentRole.id],
@@ -1166,7 +1128,7 @@ export default function App() {
     } catch (error) {
       console.error("Save failed:", error);
       if (error?.code === 'permission-denied') {
-        showNotification(`Save blocked by Firestore rules (permission-denied). path=${sharedOrdersCollectionPath}`, 'error');
+        showNotification(`Save blocked by Firestore rules (permission-denied). path=${getUserOrdersCollectionPath(user.uid)}`, 'error');
       } else {
         showNotification(`Save failed: ${error?.message || 'Unknown error'}`, 'error');
       }
@@ -1207,7 +1169,7 @@ export default function App() {
       show: true, title: 'លុប Order?', message: 'តើអ្នកពិតជាចង់លុប Order នេះមែនទេ?',
       onConfirm: async () => {
         try {
-          await deleteDoc(getSharedOrderDocRef(poNumber));
+          await deleteDoc(getUserOrderDocRef(user.uid, poNumber));
           showNotification("លុបបានជោគជ័យ");
           closeConfirmDialog();
         } catch (error) { showNotification("បរាជ័យ", 'error'); }
