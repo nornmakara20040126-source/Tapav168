@@ -4,7 +4,7 @@ import {
   Clock, User, Phone, FileText, Upload, Image as ImageIcon, Palette,
   Save, History, RefreshCw, Trash2, AlertCircle, Shield, Lock, Search,
   ArrowLeft, LayoutList, Calculator, QrCode, FileDown, Play, CheckSquare,
-  X, Menu, Home, PlusCircle, Settings, LogOut, ChevronRight, Eye, Inbox, ArrowRight, ScanLine, AlertTriangle, Camera, Edit3, Grid, Ruler, Box, Send, CornerDownRight
+  X, Home, PlusCircle, Settings, LogOut, ChevronRight, Eye, Inbox, ArrowRight, ScanLine, AlertTriangle, Camera, Edit3, Grid, Ruler, Box, Send, CornerDownRight
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "firebase/auth";
@@ -1532,13 +1532,10 @@ export default function App() {
 
       <div className="relative z-10 flex min-h-screen md:h-screen">
       {/* --- SIDEBAR --- */}
-      <aside className={`fixed inset-y-0 left-0 z-40 flex w-[84vw] max-w-xs -translate-x-full flex-col border-r border-white/60 bg-white/95 shadow-2xl backdrop-blur transition-transform duration-300 md:static md:z-auto md:w-64 md:max-w-none md:translate-x-0 md:border-r md:border-slate-200 md:bg-white ${mobileNavOpen && !isGeneratingPDF ? 'translate-x-0' : ''} ${isGeneratingPDF ? 'hidden' : 'print:hidden'}`}>
+      <aside className={`${isGeneratingPDF ? 'hidden' : 'print:hidden'} hidden md:flex md:w-64 md:flex-col md:border-r md:border-slate-200 md:bg-white`}>
         <div className="flex items-center gap-3 border-b border-slate-100 p-4 md:p-6">
           <div className="rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-500 p-2.5 text-white shadow-lg"><Shirt size={24} /></div>
           <div className="min-w-0 flex-1"><h1 className="truncate font-bold text-lg text-blue-900 leading-tight">ប្រព័ន្ធផលិត</h1><p className="text-xs text-gray-500">T-Shirt Manager</p></div>
-          <button onClick={() => setMobileNavOpen(false)} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 md:hidden">
-            <X size={18} />
-          </button>
         </div>
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
           <button onClick={() => { setViewMode('list'); setListFilter('all'); }} className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${viewMode === 'list' && listFilter === 'all' ? 'bg-blue-50 text-blue-700 font-medium shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}><div className="flex items-center gap-3"><Home size={20} /> <span>ទាំងអស់</span></div></button>
@@ -1552,11 +1549,66 @@ export default function App() {
         </div>
       </aside>
 
+      {mobileNavOpen && !isGeneratingPDF && (
+        <div className="fixed inset-x-4 top-[calc(4.8rem+env(safe-area-inset-top))] z-40 rounded-[28px] border border-white/70 bg-white/95 p-4 shadow-[0_24px_60px_-28px_rgba(15,23,42,0.65)] backdrop-blur md:hidden print:hidden">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="rounded-2xl bg-blue-100 p-2.5 text-blue-600">
+                <User size={20} />
+              </div>
+              <div>
+                <p className="text-sm font-black text-slate-900">{currentRoleLabel}</p>
+                <p className="mt-1 text-[11px] font-medium text-slate-400">Quick account actions</p>
+              </div>
+            </div>
+            <button onClick={() => setMobileNavOpen(false)} className="rounded-2xl bg-slate-100 p-2 text-slate-500 transition hover:bg-slate-200">
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className={`mt-4 grid gap-2 ${isAdmin ? 'grid-cols-2' : 'grid-cols-3'}`}>
+            <button
+              onClick={() => { setViewMode('list'); setListFilter('all'); setMobileNavOpen(false); }}
+              className={`rounded-2xl px-4 py-3 text-left text-sm font-bold transition ${viewMode === 'list' && listFilter === 'all' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-50 text-slate-700'}`}
+            >
+              All Orders
+            </button>
+            {!isAdmin && (
+              <button
+                onClick={() => { setViewMode('list'); setListFilter('my_tasks'); setMobileNavOpen(false); }}
+                className={`rounded-2xl px-4 py-3 text-left text-sm font-bold transition ${viewMode === 'list' && listFilter === 'my_tasks' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-50 text-slate-700'}`}
+              >
+                My Tasks
+              </button>
+            )}
+            <button
+              onClick={() => { setViewMode('list'); setListFilter('history'); setMobileNavOpen(false); }}
+              className={`rounded-2xl px-4 py-3 text-left text-sm font-bold transition ${viewMode === 'list' && listFilter === 'history' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-50 text-slate-700'}`}
+            >
+              History
+            </button>
+            {isAdmin && (
+              <button
+                onClick={() => { handleNewOrder(); setMobileNavOpen(false); }}
+                className="rounded-2xl bg-slate-50 px-4 py-3 text-left text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+              >
+                New Order
+              </button>
+            )}
+          </div>
+
+          <button onClick={handleLogout} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 py-3 text-sm font-bold text-red-600 transition hover:bg-red-100">
+            <LogOut size={16} />
+            Logout
+          </button>
+        </div>
+      )}
+
         <div className="flex min-h-screen flex-1 flex-col md:h-screen">
           {!isGeneratingPDF && (
             <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-white/60 bg-slate-50/90 px-4 pb-3 pt-[calc(0.85rem+env(safe-area-inset-top))] backdrop-blur md:hidden print:hidden">
               <button onClick={() => setMobileNavOpen(true)} className="rounded-2xl border border-white/70 bg-white/90 p-2.5 text-gray-700 shadow-sm">
-                <Menu size={18} />
+                <User size={18} />
               </button>
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-blue-600/80">{currentRoleLabel}</p>
