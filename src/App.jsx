@@ -855,7 +855,9 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    setShowScanner(false);
     setMobileNavOpen(false);
+    setSearchTerm('');
     setIsLoggedIn(false);
     setCurrentRole(ROLES.ADMIN);
     persistRoleSession('');
@@ -1758,9 +1760,19 @@ export default function App() {
                 <p className="mt-1 text-[11px] font-medium text-slate-400">Quick account actions</p>
               </div>
             </div>
-            <button onClick={() => setMobileNavOpen(false)} className="rounded-2xl bg-slate-100 p-2 text-slate-500 transition hover:bg-slate-200">
-              <X size={18} />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="rounded-2xl border border-red-200 bg-red-50 p-2 text-red-500 transition hover:bg-red-100"
+                aria-label="Logout"
+              >
+                <LogOut size={18} />
+              </button>
+              <button type="button" onClick={() => setMobileNavOpen(false)} className="rounded-2xl bg-slate-100 p-2 text-slate-500 transition hover:bg-slate-200">
+                <X size={18} />
+              </button>
+            </div>
           </div>
 
           <div className={`mt-4 grid gap-2 ${isAdmin ? 'grid-cols-2' : 'grid-cols-3'}`}>
@@ -1794,7 +1806,7 @@ export default function App() {
             )}
           </div>
 
-          <button onClick={handleLogout} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 py-3 text-sm font-bold text-red-600 transition hover:bg-red-100">
+          <button type="button" onClick={handleLogout} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 py-3 text-sm font-bold text-red-600 transition hover:bg-red-100">
             <LogOut size={16} />
             Logout
           </button>
@@ -1811,9 +1823,19 @@ export default function App() {
                 <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-blue-600/80">{currentRoleLabel}</p>
                 <p className="truncate text-base font-black text-slate-900">{mobileViewTitle}</p>
               </div>
-              <div className="rounded-2xl bg-white/90 px-3 py-2 text-right shadow-sm">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{mobileFocusLabel}</p>
-                <p className="text-sm font-black text-slate-900">{mobileFocusCount}</p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="rounded-2xl border border-red-200 bg-white/90 p-2.5 text-red-500 shadow-sm transition hover:bg-red-50"
+                  aria-label="Logout"
+                >
+                  <LogOut size={18} />
+                </button>
+                <div className="rounded-2xl bg-white/90 px-3 py-2 text-right shadow-sm">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{mobileFocusLabel}</p>
+                  <p className="text-sm font-black text-slate-900">{mobileFocusCount}</p>
+                </div>
               </div>
             </header>
           )}
