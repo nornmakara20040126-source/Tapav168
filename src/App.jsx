@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "firebase/auth";
-import { getFirestore, doc, setDoc, updateDoc, getDoc, collection, onSnapshot, deleteDoc, query, orderBy } from "firebase/firestore";
+import { getFirestore, doc, setDoc, updateDoc, getDoc, getDocs, collection, onSnapshot, deleteDoc, query, orderBy } from "firebase/firestore";
 
 // =====================================================================
 // ការកំណត់ Firebase និងការសម្អាត App ID ដើម្បីការពារ Error
@@ -40,6 +40,10 @@ const db = getFirestore(app);
 const inferredAppId = firebaseConfig?.appId || firebaseConfig?.projectId || 'default-app-id';
 const rawAppId = typeof __app_id !== 'undefined' && __app_id ? String(__app_id) : inferredAppId;
 const safeAppId = rawAppId.replace(/[^a-zA-Z0-9_-]/g, '-');
+const sharedOrdersCollectionRef = collection(db, 'artifacts', safeAppId, 'orders');
+const sharedOrdersCollectionPath = ['artifacts', safeAppId, 'orders'].join('/');
+const getSharedOrderDocRef = (poNumber) => doc(sharedOrdersCollectionRef, poNumber);
+const getLegacyOrdersCollectionRef = (uid) => collection(db, 'artifacts', safeAppId, 'users', uid, 'orders');
 
 // តួនាទីអ្នកប្រើប្រាស់ (User Roles)
 const ROLES = {
@@ -302,7 +306,7 @@ const formatDate = (isoString) => {
 };
 
 // Login Screen Component
-const LoginScreen = ({ onLogin }) => {
+const LoginScreen = ({ onLogin, authError }) => {
   const [selectedRole, setSelectedRole] = useState('admin');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -395,6 +399,7 @@ const LoginScreen = ({ onLogin }) => {
                 </button>
               </div>
               {loginError && <p className="text-xs text-red-600 mt-2">{loginError}</p>}
+              {authError && <p className="text-xs text-red-600 mt-2">{authError}</p>}
             </div>
 
             <button
@@ -442,6 +447,7 @@ const TShirtMockup = ({ uploadedImage, color }) => {
 
 export default function App() {
   const [user, setUser] = useState(null);
+  const [authError, setAuthError] = useState('');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentRole, setCurrentRole] = useState(ROLES.ADMIN);
   const [saving, setSaving] = useState(false);
@@ -461,6 +467,7 @@ export default function App() {
   const [showScanner, setShowScanner] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const searchInputRef = useRef(null);
+  const migratedLegacyUidsRef = useRef(new Set());
   const closeConfirmDialog = () => setConfirmDialog({ ...EMPTY_CONFIRM_DIALOG });
 
   const [orderInfo, setOrderInfo] = useState({
@@ -508,10 +515,18 @@ export default function App() {
   // --- Auth & Data Loading ---
   useEffect(() => {
     const initAuth = async () => {
-      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        await signInWithCustomToken(auth, __initial_auth_token);
-      } else {
-        await signInAnonymously(auth);
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+        setAuthError('');
+      } catch (error) {
+        console.error('Firebase auth failed:', error);
+        const message = error?.message || 'Firebase sign-in failed. Check internet or authorized domains.';
+        setAuthError(message);
+        showNotification(`Firebase sign-in failed: ${message}`, 'error');
       }
     };
     initAuth();
@@ -520,9 +535,45 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!user?.uid) return;
+    if (migratedLegacyUidsRef.current.has(user.uid)) return;
+
+    migratedLegacyUidsRef.current.add(user.uid);
+
+    const migrateLegacyOrders = async () => {
+      try {
+        const legacyOrdersRef = getLegacyOrdersCollectionRef(user.uid);
+        const [legacySnapshot, sharedSnapshot] = await Promise.all([
+          getDocs(legacyOrdersRef),
+          getDocs(sharedOrdersCollectionRef),
+        ]);
+
+        if (legacySnapshot.empty) return;
+
+        const sharedIds = new Set(sharedSnapshot.docs.map((snapshotDoc) => snapshotDoc.id));
+        const legacyOrdersToCopy = legacySnapshot.docs.filter((snapshotDoc) => !sharedIds.has(snapshotDoc.id));
+
+        if (!legacyOrdersToCopy.length) return;
+
+        await Promise.all(
+          legacyOrdersToCopy.map((snapshotDoc) =>
+            setDoc(getSharedOrderDocRef(snapshotDoc.id), snapshotDoc.data(), { merge: true })
+          )
+        );
+
+        showNotification(`Migrated ${legacyOrdersToCopy.length} old order(s) to the shared database.`, 'info');
+      } catch (error) {
+        console.error('Legacy order migration failed:', error);
+      }
+    };
+
+    void migrateLegacyOrders();
+  }, [user]);
+
+  useEffect(() => {
     if (!user) return;
     // ប្រើ safeAppId ដើម្បីការពារកុំអោយ Error
-    const q = query(collection(db, 'artifacts', safeAppId, 'users', user.uid, 'orders'));
+    const q = query(sharedOrdersCollectionRef);
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       orders.sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
@@ -542,7 +593,9 @@ export default function App() {
     }, (error) => {
       console.error("Error fetching:", error);
       if (error?.code === 'permission-denied') {
-        showNotification(`Read blocked by Firestore rules (permission-denied). appId=${safeAppId}`, 'error');
+        showNotification(`Read blocked by Firestore rules (permission-denied). path=${sharedOrdersCollectionPath}`, 'error');
+      } else {
+        showNotification(`Database read failed: ${error?.message || 'Unknown error'}`, 'error');
       }
     });
     return () => unsubscribe();
@@ -761,7 +814,7 @@ export default function App() {
         startStep: parseInt(startStep)
       };
 
-      await setDoc(doc(db, 'artifacts', safeAppId, 'users', user.uid, 'orders', order.orderInfo.poNumber), {
+      await setDoc(getSharedOrderDocRef(order.orderInfo.poNumber), {
         ...order,
         orderInfo: updatedOrderInfo
       }, { merge: true });
@@ -964,7 +1017,7 @@ export default function App() {
     setReceiveModal({ show: false, order: null, stepIndex: null, quantity: 0, sizes: {} });
 
     try {
-      await setDoc(doc(db, 'artifacts', safeAppId, 'users', user.uid, 'orders', order.orderInfo.poNumber), {
+      await setDoc(getSharedOrderDocRef(order.orderInfo.poNumber), {
         ...order, stepsData: updatedStepsData
       }, { merge: true });
       void sendTelegramToRoles(
@@ -1029,7 +1082,7 @@ export default function App() {
     }
 
     try {
-      await setDoc(doc(db, 'artifacts', safeAppId, 'users', user.uid, 'orders', order.orderInfo.poNumber), {
+      await setDoc(getSharedOrderDocRef(order.orderInfo.poNumber), {
         ...order, stepsData: updatedStepsData
       }, { merge: true });
       void sendTelegramToRoles(
@@ -1095,8 +1148,8 @@ export default function App() {
         return;
       }
 
-      const savePath = ['artifacts', safeAppId, 'users', user.uid, 'orders', finalOrderInfo.poNumber].join('/');
-      await setDoc(doc(db, 'artifacts', safeAppId, 'users', user.uid, 'orders', finalOrderInfo.poNumber), orderData);
+      const savePath = `${sharedOrdersCollectionPath}/${finalOrderInfo.poNumber}`;
+      await setDoc(getSharedOrderDocRef(finalOrderInfo.poNumber), orderData);
       console.log("Saved to:", savePath);
       void sendTelegramToRoles(
         [currentRole.id],
@@ -1113,7 +1166,7 @@ export default function App() {
     } catch (error) {
       console.error("Save failed:", error);
       if (error?.code === 'permission-denied') {
-        showNotification(`Save blocked by Firestore rules (permission-denied). appId=${safeAppId}`, 'error');
+        showNotification(`Save blocked by Firestore rules (permission-denied). path=${sharedOrdersCollectionPath}`, 'error');
       } else {
         showNotification(`Save failed: ${error?.message || 'Unknown error'}`, 'error');
       }
@@ -1154,7 +1207,7 @@ export default function App() {
       show: true, title: 'លុប Order?', message: 'តើអ្នកពិតជាចង់លុប Order នេះមែនទេ?',
       onConfirm: async () => {
         try {
-          await deleteDoc(doc(db, 'artifacts', safeAppId, 'users', user.uid, 'orders', poNumber));
+          await deleteDoc(getSharedOrderDocRef(poNumber));
           showNotification("លុបបានជោគជ័យ");
           closeConfirmDialog();
         } catch (error) { showNotification("បរាជ័យ", 'error'); }
@@ -1227,7 +1280,7 @@ export default function App() {
 
   // --- RENDER LOGIN SCREEN ---
   if (!isLoggedIn) {
-    return <LoginScreen onLogin={handleLogin} />;
+    return <LoginScreen onLogin={handleLogin} authError={authError} />;
   }
 
   // --- RENDER MAIN APP ---
