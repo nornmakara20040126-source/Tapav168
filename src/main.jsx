@@ -101,7 +101,7 @@ function AppShell() {
       <App />
 
       {(showInstallPrompt || showIosPrompt) && (
-        <div className="fixed inset-x-3 bottom-3 z-[90] sm:left-auto sm:right-4 sm:max-w-sm">
+        <div className="fixed inset-x-3 bottom-[calc(6.5rem+env(safe-area-inset-bottom))] z-[90] sm:bottom-4 sm:left-auto sm:right-4 sm:max-w-sm">
           <div className="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-2xl backdrop-blur">
             <div className="flex items-start justify-between gap-3">
               <div>

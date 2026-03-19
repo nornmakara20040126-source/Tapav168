@@ -3,8 +3,31 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    min-height: 100%;
+    background: #e2e8f0;
+  }
+
   body {
+    min-height: 100vh;
     font-family: theme('fontFamily.sans');
+    background:
+      radial-gradient(circle at top left, rgba(59, 130, 246, 0.18), transparent 30rem),
+      radial-gradient(circle at top right, rgba(6, 182, 212, 0.14), transparent 24rem),
+      linear-gradient(180deg, #f8fbff 0%, #eef4ff 36%, #f1f5f9 100%);
+    color: #1e293b;
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    -webkit-tap-highlight-color: transparent;
   }
 }
 

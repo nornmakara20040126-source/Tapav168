@@ -908,6 +908,16 @@ export default function App() {
     }).length;
   }, [savedOrders, currentRole, isAdmin, isOperation]);
 
+  const pendingApprovalCount = useMemo(
+    () => savedOrders.filter((order) => !order.orderInfo.status || order.orderInfo.status === 'pending_operation').length,
+    [savedOrders]
+  );
+
+  const inProductionCount = useMemo(
+    () => savedOrders.filter((order) => order.orderInfo.status === 'production').length,
+    [savedOrders]
+  );
+
   const currentRoleLabel = currentRole.label.split(' (')[0];
   const listTitle =
     listFilter === 'my_tasks'
@@ -927,6 +937,9 @@ export default function App() {
         : listFilter === 'history'
           ? 'ប្រវត្តិ'
           : 'ការកុម្ម៉ង់ទាំងអស់';
+
+  const mobileFocusCount = isAdmin || isOperation ? pendingApprovalCount : pendingTasksCount;
+  const mobileFocusLabel = isAdmin || isOperation ? 'Awaiting Review' : 'My Tasks';
 
   const getOrderStatusMeta = (order) => {
     const status = order.orderInfo.status || 'pending_operation';
@@ -960,6 +973,108 @@ export default function App() {
         ? 'bg-green-50 text-green-700'
         : 'bg-yellow-50 text-yellow-700',
     };
+  };
+
+  const getOrderListUiMeta = (order) => {
+    const sData = order.stepsData || {};
+    const orderStatus = order.orderInfo.status || 'pending_operation';
+    const startStep = order.orderInfo.startStep || 0;
+    let displayStatus = null;
+    let action = null;
+
+    const createAction = (label, IconComponent, tone, onPress) => ({
+      label,
+      IconComponent,
+      tone,
+      onPress: (event) => {
+        event?.stopPropagation?.();
+        onPress();
+      },
+    });
+
+    if (orderStatus === 'pending_operation') {
+      if (isOperation) {
+        displayStatus = (
+          <span className="text-purple-600 font-bold bg-purple-50 px-2 py-1 rounded text-xs">
+            រង់ចាំការអនុម័ត
+          </span>
+        );
+        action = createAction('Approve', Send, 'purple', () => openApproveModal(order));
+      } else {
+        displayStatus = (
+          <span className="text-gray-400 font-bold bg-gray-50 px-2 py-1 rounded text-xs flex items-center gap-1">
+            <Lock size={12} /> រង់ចាំ Operation
+          </span>
+        );
+      }
+
+      return { displayStatus, action };
+    }
+
+    if (listFilter === 'my_tasks' && !isAdmin && !isOperation) {
+      const activeStepIndex = STEPS.findIndex((step, idx) => {
+        const isMyRole = currentRole.permissions.includes(idx);
+        const stepStatus = sData[idx]?.status || 'pending';
+        const ready = isStepReady(idx, sData, startStep);
+        return isMyRole && ((stepStatus === 'pending' && ready) || stepStatus === 'in_progress');
+      });
+
+      if (activeStepIndex !== -1) {
+        const currentStatus = sData[activeStepIndex]?.status || 'pending';
+
+        if (currentStatus === 'pending') {
+          displayStatus = (
+            <span className="text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded text-xs flex items-center gap-1">
+              <Play size={12} /> រង់ចាំអ្នកទទួល
+            </span>
+          );
+          action = createAction('Receive', Play, 'blue', () => openReceiveModal(order, activeStepIndex));
+        } else if (currentStatus === 'in_progress') {
+          displayStatus = (
+            <span className="text-orange-600 font-bold bg-orange-50 px-2 py-1 rounded text-xs flex items-center gap-1">
+              <RefreshCw size={12} className="animate-spin" /> កំពុងធ្វើ...
+            </span>
+          );
+          action = createAction('Finish', CheckCircle, 'green', () => openConfirmComplete(order, activeStepIndex));
+        }
+      }
+    }
+
+    if (!displayStatus) {
+      let lastStepIndex = -1;
+      Object.keys(sData).forEach((key) => {
+        const parsedIndex = parseInt(key, 10);
+        if (Number.isFinite(parsedIndex) && parsedIndex > lastStepIndex) {
+          lastStepIndex = parsedIndex;
+        }
+      });
+
+      if (lastStepIndex > -1) {
+        displayStatus = (
+          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${sData[lastStepIndex].status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+            {STEPS[lastStepIndex]?.label}
+          </span>
+        );
+      } else {
+        displayStatus = <span className="text-blue-600 bg-blue-50 px-2 py-1 rounded text-xs">កំពុងផលិត</span>;
+      }
+    }
+
+    return { displayStatus, action };
+  };
+
+  const getActionButtonClassName = (tone, variant = 'desktop') => {
+    const baseClasses = variant === 'mobile'
+      ? 'inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold text-white shadow-sm transition active:scale-[0.98]'
+      : 'inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-bold text-white shadow-sm transition';
+
+    const toneClasses = tone === 'purple'
+      ? 'bg-purple-600 hover:bg-purple-700'
+      : tone === 'green'
+        ? 'bg-green-600 hover:bg-green-700'
+        : 'bg-blue-600 hover:bg-blue-700';
+
+    return `${baseClasses} ${toneClasses}`;
   };
 
   const openReceiveModal = (order, stepIndex) => {
@@ -1285,7 +1400,8 @@ export default function App() {
 
   // --- RENDER MAIN APP ---
   return (
-    <div className="min-h-screen bg-gray-100 font-sans text-gray-800 print:bg-white print:h-auto">
+    <div className="min-h-screen bg-transparent font-sans text-gray-800 print:bg-white print:h-auto">
+      <div className="pointer-events-none fixed inset-x-0 top-0 z-0 h-72 bg-[radial-gradient(circle_at_top_left,_rgba(37,99,235,0.2),_transparent_32rem),radial-gradient(circle_at_top_right,_rgba(8,145,178,0.18),_transparent_24rem)] print:hidden" />
 
       {mobileNavOpen && !isGeneratingPDF && (
         <div
@@ -1414,11 +1530,11 @@ export default function App() {
         </div>
       )}
 
-      <div className="flex min-h-screen md:h-screen">
+      <div className="relative z-10 flex min-h-screen md:h-screen">
       {/* --- SIDEBAR --- */}
-      <aside className={`fixed inset-y-0 left-0 z-40 flex w-[82vw] max-w-xs -translate-x-full flex-col border-r border-gray-200 bg-white transition-transform duration-300 md:static md:z-auto md:w-64 md:max-w-none md:translate-x-0 ${mobileNavOpen && !isGeneratingPDF ? 'translate-x-0 shadow-2xl' : ''} ${isGeneratingPDF ? 'hidden' : 'print:hidden'}`}>
-        <div className="flex items-center gap-3 border-b border-gray-100 p-4 md:p-6">
-          <div className="bg-blue-600 p-2 rounded-lg text-white"><Shirt size={24} /></div>
+      <aside className={`fixed inset-y-0 left-0 z-40 flex w-[84vw] max-w-xs -translate-x-full flex-col border-r border-white/60 bg-white/95 shadow-2xl backdrop-blur transition-transform duration-300 md:static md:z-auto md:w-64 md:max-w-none md:translate-x-0 md:border-r md:border-slate-200 md:bg-white ${mobileNavOpen && !isGeneratingPDF ? 'translate-x-0' : ''} ${isGeneratingPDF ? 'hidden' : 'print:hidden'}`}>
+        <div className="flex items-center gap-3 border-b border-slate-100 p-4 md:p-6">
+          <div className="rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-500 p-2.5 text-white shadow-lg"><Shirt size={24} /></div>
           <div className="min-w-0 flex-1"><h1 className="truncate font-bold text-lg text-blue-900 leading-tight">ប្រព័ន្ធផលិត</h1><p className="text-xs text-gray-500">T-Shirt Manager</p></div>
           <button onClick={() => setMobileNavOpen(false)} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 md:hidden">
             <X size={18} />
@@ -1438,46 +1554,98 @@ export default function App() {
 
         <div className="flex min-h-screen flex-1 flex-col md:h-screen">
           {!isGeneratingPDF && (
-            <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-gray-200 bg-white/95 px-4 py-3 backdrop-blur md:hidden print:hidden">
-              <button onClick={() => setMobileNavOpen(true)} className="rounded-xl border border-gray-200 bg-white p-2.5 text-gray-700 shadow-sm">
+            <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-white/60 bg-slate-50/90 px-4 pb-3 pt-[calc(0.85rem+env(safe-area-inset-top))] backdrop-blur md:hidden print:hidden">
+              <button onClick={() => setMobileNavOpen(true)} className="rounded-2xl border border-white/70 bg-white/90 p-2.5 text-gray-700 shadow-sm">
                 <Menu size={18} />
               </button>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold text-gray-900">{mobileViewTitle}</p>
-                <p className="text-[11px] text-gray-500">{currentRoleLabel}</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-blue-600/80">{currentRoleLabel}</p>
+                <p className="truncate text-base font-black text-slate-900">{mobileViewTitle}</p>
               </div>
-              {!isAdmin && viewMode === 'list' && pendingTasksCount > 0 && (
-                <span className="rounded-full bg-red-500 px-2.5 py-1 text-xs font-bold text-white">{pendingTasksCount}</span>
-              )}
+              <div className="rounded-2xl bg-white/90 px-3 py-2 text-right shadow-sm">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{mobileFocusLabel}</p>
+                <p className="text-sm font-black text-slate-900">{mobileFocusCount}</p>
+              </div>
             </header>
           )}
 
       {/* --- MAIN CONTENT --- */}
-      <main className={`flex-1 overflow-y-auto overflow-x-hidden bg-gray-50 ${isGeneratingPDF ? 'p-0 bg-white' : 'px-4 py-4 sm:px-5 md:p-6 print:p-0 print:bg-white'}`}>
+      <main className={`flex-1 overflow-y-auto overflow-x-hidden ${isGeneratingPDF ? 'bg-white p-0' : 'bg-transparent px-4 pb-[calc(8rem+env(safe-area-inset-bottom))] pt-4 sm:px-5 md:bg-slate-50 md:p-6 md:pb-6 print:bg-white print:p-0'}`}>
         {/* LIST VIEW */}
         {viewMode === 'list' && (
           <div className="max-w-6xl mx-auto space-y-6 print:hidden">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="hidden flex-col gap-4 md:flex md:flex-row md:items-center md:justify-between">
               <div>
                 <h2 className="text-xl font-bold text-gray-800 md:text-2xl">{listTitle}</h2>
                 <p className="mt-1 text-sm text-gray-500">{listDescription}</p>
               </div>
-              <div className="relative w-full md:w-72">
+              <div className="hidden relative w-full md:block md:w-72">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
                 <input ref={searchInputRef} type="text" placeholder="ស្វែងរក / Scan QR..." className="w-full pl-10 p-2.5 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none shadow-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} autoFocus />
                 <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 cursor-pointer hover:text-blue-500 transition" onClick={() => setShowScanner(true)}><ScanLine size={16} /></div>
               </div>
             </div>
 
-            <div className="space-y-3 md:hidden">
+            <div className="space-y-4 md:hidden">
+              <section className="overflow-hidden rounded-[28px] bg-gradient-to-br from-slate-950 via-blue-950 to-cyan-700 p-5 text-white shadow-[0_25px_60px_-30px_rgba(15,23,42,0.9)]">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-100/70">{currentRoleLabel}</p>
+                    <h2 className="mt-3 text-2xl font-black leading-tight">{listTitle}</h2>
+                    <p className="mt-2 text-sm leading-6 text-blue-100/80">{listDescription}</p>
+                  </div>
+                  {isAdmin && (
+                    <button onClick={handleNewOrder} className="inline-flex shrink-0 items-center gap-2 rounded-2xl bg-white/14 px-4 py-3 text-sm font-bold text-white shadow-lg ring-1 ring-white/20 transition hover:bg-white/20">
+                      <PlusCircle size={16} />
+                      New
+                    </button>
+                  )}
+                </div>
+                <div className="mt-5 grid grid-cols-3 gap-2">
+                  <div className="rounded-2xl bg-white/12 px-3 py-3 backdrop-blur">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-100/70">All</p>
+                    <p className="mt-2 text-2xl font-black">{savedOrders.length}</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/12 px-3 py-3 backdrop-blur">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-100/70">Live</p>
+                    <p className="mt-2 text-2xl font-black">{inProductionCount}</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/12 px-3 py-3 backdrop-blur">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-100/70">{mobileFocusLabel}</p>
+                    <p className="mt-2 text-2xl font-black">{mobileFocusCount}</p>
+                  </div>
+                </div>
+              </section>
+
+              <section className="sticky top-[76px] z-10 rounded-[24px] border border-white/70 bg-white/92 p-3 shadow-[0_18px_50px_-28px_rgba(15,23,42,0.45)] backdrop-blur">
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                    <input
+                      ref={searchInputRef}
+                      type="text"
+                      placeholder="Search PO or customer"
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+                  <button type="button" onClick={() => setShowScanner(true)} className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-600 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600" aria-label="Scan QR">
+                    <ScanLine size={18} />
+                  </button>
+                </div>
+                <p className="mt-2 px-1 text-[11px] font-medium text-slate-400">Quick search, scan, and open orders with one tap.</p>
+              </section>
               {filteredOrders.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-10 text-center text-sm italic text-gray-400">
                   មិនទាន់មាន Order
                 </div>
               ) : filteredOrders.map((order) => {
                 const statusMeta = getOrderStatusMeta(order);
+                const { displayStatus, action } = getOrderListUiMeta(order);
                 return (
-                  <div key={order.id} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                  <div key={order.id} className="overflow-hidden rounded-[26px] border border-white/70 bg-white/95 shadow-[0_20px_45px_-32px_rgba(15,23,42,0.55)]">
                     <div
                       role="button"
                       tabIndex={0}
@@ -1488,34 +1656,57 @@ export default function App() {
                           handleLoad(order);
                         }
                       }}
-                      className="cursor-pointer"
+                      className="cursor-pointer p-4"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">PO Number</p>
-                          <p className="truncate font-mono text-lg font-bold text-blue-700">{order.orderInfo.poNumber}</p>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">PO Number</p>
+                          <p className="mt-1 truncate font-mono text-xl font-black text-blue-700">{order.orderInfo.poNumber}</p>
                         </div>
-                        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${statusMeta.className}`}>{statusMeta.label}</span>
+                        <span className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-bold shadow-sm ${statusMeta.className}`}>{statusMeta.label}</span>
                       </div>
-                      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                        <div>
-                          <p className="text-[11px] uppercase tracking-wide text-gray-400">Customer</p>
-                          <p className="font-medium text-gray-900">{order.orderInfo.customer || '-'}</p>
+                      <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                        <div className="rounded-2xl bg-slate-50 px-3 py-3">
+                          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Customer</p>
+                          <p className="mt-2 font-semibold text-slate-900">{order.orderInfo.customer || '-'}</p>
                         </div>
-                        <div>
-                          <p className="text-[11px] uppercase tracking-wide text-gray-400">Quantity</p>
-                          <p className="font-bold text-gray-900">{order.orderInfo.quantity} pcs</p>
+                        <div className="rounded-2xl bg-slate-50 px-3 py-3">
+                          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Quantity</p>
+                          <p className="mt-2 font-black text-slate-900">{order.orderInfo.quantity} pcs</p>
                         </div>
-                        <div className="col-span-2">
-                          <p className="text-[11px] uppercase tracking-wide text-gray-400">Deadline</p>
-                          <p className="font-medium text-gray-900">{order.orderInfo.deadline || '-'}</p>
+                        <div className="col-span-2 rounded-2xl bg-slate-50 px-3 py-3">
+                          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Deadline</p>
+                          <p className="mt-2 font-semibold text-slate-900">{order.orderInfo.deadline || '-'}</p>
                         </div>
                       </div>
-                      <div className="mt-4 text-xs font-medium text-blue-600">ចុចដើម្បីបើកព័ត៌មានលម្អិត</div>
+                      <div className="mt-4 text-xs font-medium text-slate-500">Quick actions are ready below.</div>
+                    </div>
+                    <div className="mt-4 border-t border-slate-100 pt-4">
+                      <div className={`grid gap-2 ${action ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                        <button type="button" onClick={() => handleLoad(order)} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100">
+                          <Eye size={16} />
+                          Open
+                        </button>
+                        {action ? (
+                          <button type="button" onClick={action.onPress} className={getActionButtonClassName(action.tone, 'mobile')}>
+                            <action.IconComponent size={16} />
+                            {action.label}
+                          </button>
+                        ) : null}
+                      </div>
+                      <div className="mt-3 rounded-2xl bg-slate-50 px-3 py-3">
+                        <p className="text-[10px] uppercase tracking-[0.22em] text-slate-400">Workflow</p>
+                        <div className="mt-2 flex items-center justify-between gap-3">
+                          <div>{displayStatus}</div>
+                          <div className="rounded-full bg-white p-2 text-slate-400 shadow-sm">
+                            <ChevronRight size={16} />
+                          </div>
+                        </div>
+                      </div>
                     </div>
                     {isAdmin && (
-                      <div className="mt-4 border-t border-gray-100 pt-4">
-                        <button onClick={(e) => handleDelete(order.id, e)} className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-100">
+                      <div className="mt-3 border-t border-slate-100 pt-3">
+                        <button onClick={(e) => handleDelete(order.id, e)} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600 transition hover:bg-red-100">
                           <Trash2 size={16} />
                           លុប Order
                         </button>
@@ -1600,15 +1791,43 @@ export default function App() {
         {/* FORM VIEW */}
         {viewMode === 'form' && (
           <div className="max-w-7xl mx-auto animate-in fade-in duration-300">
+            {!isGeneratingPDF && (
+              <section className="mb-4 overflow-hidden rounded-[28px] bg-gradient-to-br from-slate-950 via-blue-950 to-cyan-700 p-5 text-white shadow-[0_25px_60px_-30px_rgba(15,23,42,0.9)] md:hidden print:hidden">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-100/70">Current Order</p>
+                    <h2 className="mt-3 truncate text-2xl font-black leading-tight">{orderInfo.poNumber || 'New Order'}</h2>
+                    <p className="mt-2 text-sm text-blue-100/80">{orderInfo.customer || 'Add customer details and production notes.'}</p>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-bold ${orderInfo.status === 'production' ? 'bg-emerald-400/15 text-emerald-100 ring-1 ring-emerald-200/20' : 'bg-white/15 text-white ring-1 ring-white/20'}`}>
+                    {orderInfo.status === 'production' ? 'Live' : 'Draft'}
+                  </span>
+                </div>
+                <div className="mt-5 grid grid-cols-3 gap-2">
+                  <div className="rounded-2xl bg-white/12 px-3 py-3 backdrop-blur">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-100/70">Qty</p>
+                    <p className="mt-2 text-2xl font-black">{orderInfo.quantity || 0}</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/12 px-3 py-3 backdrop-blur">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-100/70">Deadline</p>
+                    <p className="mt-2 truncate text-sm font-bold">{orderInfo.deadline || '-'}</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/12 px-3 py-3 backdrop-blur">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-100/70">Role</p>
+                    <p className="mt-2 truncate text-sm font-bold">{currentRoleLabel}</p>
+                  </div>
+                </div>
+              </section>
+            )}
             {/* Action Bar */}
-            <div className={`mb-6 flex flex-col gap-3 ${isGeneratingPDF ? 'hidden' : 'print:hidden'} sm:flex-row sm:items-start sm:justify-between`}>
+            <div className={`mb-6 flex flex-col gap-3 rounded-[24px] border border-white/70 bg-white/90 p-3 shadow-[0_18px_50px_-28px_rgba(15,23,42,0.45)] backdrop-blur ${isGeneratingPDF ? 'hidden' : 'print:hidden'} sm:flex-row sm:items-start sm:justify-between sm:p-4`}>
               <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                <button onClick={() => setViewMode('list')} className="p-2 hover:bg-gray-200 rounded-full transition"><ArrowLeft size={20} /></button>
+                <button onClick={() => setViewMode('list')} className="rounded-2xl bg-slate-100 p-2.5 text-slate-700 transition hover:bg-slate-200"><ArrowLeft size={20} /></button>
                 <h2 className="text-lg font-bold text-gray-800 sm:text-2xl">{orderInfo.poNumber ? `Order: ${orderInfo.poNumber}` : 'ការកុម្ម៉ង់ថ្មី'}</h2>
                 {orderInfo.status === 'pending_operation' && <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs sm:text-sm font-bold flex items-center gap-1"><Lock size={12} /> Pending Operation</span>}
                 {orderInfo.status === 'production' && <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs sm:text-sm font-bold flex items-center gap-1"><RefreshCw size={12} /> In Production</span>}
               </div>
-              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+              <div className="hidden w-full flex-col gap-2 sm:flex sm:w-auto sm:flex-row">
                 {isOperation && orderInfo.status === 'pending_operation' && (<button onClick={() => openApproveModal({ orderInfo, stepsData })} className="flex w-full items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-white shadow-sm transition hover:bg-purple-700 sm:w-auto"><Send size={18} /> Approve & Send</button>)}
                 {isAdmin && <button onClick={handleSave} disabled={saving} className="flex w-full items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-white shadow-sm transition hover:bg-green-700 sm:w-auto"><Save size={18} /> Save</button>}
                 <button onClick={handleDownloadPDF} className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white shadow-sm transition hover:bg-blue-700 sm:w-auto"><FileDown size={18} /> PDF</button>
@@ -1823,7 +2042,61 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {!isGeneratingPDF && viewMode === 'form' && (
+          <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/70 bg-white/92 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3 shadow-[0_-20px_60px_-35px_rgba(15,23,42,0.65)] backdrop-blur md:hidden print:hidden">
+            <div className="mx-auto flex max-w-lg items-center gap-2">
+              <button onClick={() => setViewMode('list')} className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-700 shadow-sm transition hover:bg-slate-100">
+                <ArrowLeft size={18} />
+              </button>
+              {isOperation && orderInfo.status === 'pending_operation' && (
+                <button onClick={() => openApproveModal({ orderInfo, stepsData })} className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-purple-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-purple-500/25">
+                  <Send size={16} />
+                  Approve
+                </button>
+              )}
+              {isAdmin && (
+                <button onClick={handleSave} disabled={saving} className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-green-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-green-500/25 disabled:cursor-not-allowed disabled:opacity-70">
+                  <Save size={16} />
+                  {saving ? 'Saving...' : 'Save'}
+                </button>
+              )}
+              <button onClick={handleDownloadPDF} className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-blue-500/25">
+                <FileDown size={16} />
+                PDF
+              </button>
+            </div>
+          </div>
+        )}
       </main>
+
+          {!isGeneratingPDF && viewMode === 'list' && (
+            <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-white/70 bg-white/92 px-3 pb-[calc(0.9rem+env(safe-area-inset-bottom))] pt-3 shadow-[0_-20px_60px_-35px_rgba(15,23,42,0.65)] backdrop-blur md:hidden print:hidden">
+              <div className={`mx-auto grid max-w-lg gap-2 ${isAdmin ? 'grid-cols-4' : 'grid-cols-3'}`}>
+                <button onClick={() => { setViewMode('list'); setListFilter('all'); }} className={`flex flex-col items-center justify-center rounded-2xl px-3 py-2.5 text-[11px] font-bold transition ${viewMode === 'list' && listFilter === 'all' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25' : 'bg-slate-50 text-slate-500'}`}>
+                  <Home size={18} />
+                  <span className="mt-1">Orders</span>
+                </button>
+                {!isAdmin && (
+                  <button onClick={() => { setViewMode('list'); setListFilter('my_tasks'); }} className={`relative flex flex-col items-center justify-center rounded-2xl px-3 py-2.5 text-[11px] font-bold transition ${viewMode === 'list' && listFilter === 'my_tasks' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25' : 'bg-slate-50 text-slate-500'}`}>
+                    <Inbox size={18} />
+                    <span className="mt-1">Tasks</span>
+                    {pendingTasksCount > 0 && <span className={`absolute right-2 top-2 rounded-full px-1.5 py-0.5 text-[10px] font-black ${viewMode === 'list' && listFilter === 'my_tasks' ? 'bg-white text-blue-600' : 'bg-red-500 text-white'}`}>{pendingTasksCount}</span>}
+                  </button>
+                )}
+                <button onClick={() => { setViewMode('list'); setListFilter('history'); }} className={`flex flex-col items-center justify-center rounded-2xl px-3 py-2.5 text-[11px] font-bold transition ${viewMode === 'list' && listFilter === 'history' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25' : 'bg-slate-50 text-slate-500'}`}>
+                  <History size={18} />
+                  <span className="mt-1">History</span>
+                </button>
+                {isAdmin && (
+                  <button onClick={handleNewOrder} className="flex flex-col items-center justify-center rounded-2xl bg-slate-50 px-3 py-2.5 text-[11px] font-bold text-slate-500 transition hover:bg-slate-100">
+                    <PlusCircle size={18} />
+                    <span className="mt-1">New</span>
+                  </button>
+                )}
+              </div>
+            </nav>
+          )}
         </div>
       </div>
     </div>
