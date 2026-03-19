@@ -468,6 +468,8 @@ export default function App() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const searchInputRef = useRef(null);
   const migratedLegacyUidsRef = useRef(new Set());
+  const qrScannerRef = useRef(null);
+  const qrScannerClosingRef = useRef(false);
   const closeConfirmDialog = () => setConfirmDialog({ ...EMPTY_CONFIRM_DIALOG });
 
   const [orderInfo, setOrderInfo] = useState({
@@ -610,10 +612,141 @@ export default function App() {
     setOrderInfo(prev => ({ ...prev, quantity: total }));
   }, [orderInfo.sizes]);
 
+  const stopScanner = async () => {
+    const scanner = qrScannerRef.current;
+    qrScannerRef.current = null;
+    if (!scanner) return;
+
+    try {
+      if (scanner.isScanning) {
+        await scanner.stop();
+      }
+    } catch (error) {
+      console.error('Failed to stop QR scanner.', error);
+    }
+
+    try {
+      await scanner.clear();
+    } catch (error) {
+      console.error('Failed to clear QR scanner.', error);
+    }
+  };
+
+  useEffect(() => {
+    if (!showScanner) {
+      void stopScanner();
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const startScanner = async () => {
+      if (!window.Html5Qrcode) {
+        showNotification('QR scanner is still loading. Please try again.', 'warning');
+        setShowScanner(false);
+        return;
+      }
+
+      const readerElement = document.getElementById('reader');
+      if (readerElement) {
+        readerElement.innerHTML = '';
+      }
+
+      const scanner = new window.Html5Qrcode('reader');
+      qrScannerRef.current = scanner;
+
+      const handleScanSuccess = async (decodedText) => {
+        if (cancelled || qrScannerClosingRef.current) return;
+
+        qrScannerClosingRef.current = true;
+        const normalizedText = String(decodedText || '').trim();
+
+        await stopScanner();
+
+        if (cancelled) {
+          qrScannerClosingRef.current = false;
+          return;
+        }
+
+        setShowScanner(false);
+        if (!normalizedText) {
+          qrScannerClosingRef.current = false;
+          return;
+        }
+
+        setSearchTerm(normalizedText);
+        const loweredText = normalizedText.toLowerCase();
+        const matchedOrders = savedOrders.filter((order) => {
+          const customer = String(order.orderInfo.customer || '').toLowerCase();
+          const poNumber = String(order.orderInfo.poNumber || '').trim().toLowerCase();
+          return customer.includes(loweredText) || poNumber.includes(loweredText);
+        });
+        const exactMatch = matchedOrders.find(
+          (order) => String(order.orderInfo.poNumber || '').trim().toLowerCase() === loweredText
+        );
+        const matchedOrder = exactMatch || (matchedOrders.length === 1 ? matchedOrders[0] : null);
+
+        if (matchedOrder) {
+          handleLoad(matchedOrder);
+          showNotification(`Opened order ${matchedOrder.orderInfo.poNumber}`, 'success');
+        } else {
+          setViewMode('list');
+          showNotification(`Scanned: ${normalizedText}`, 'success');
+          window.setTimeout(() => searchInputRef.current?.focus(), 120);
+        }
+
+        qrScannerClosingRef.current = false;
+      };
+
+      const scannerConfig = {
+        fps: 10,
+        qrbox: { width: 220, height: 220 },
+        aspectRatio: 1,
+        rememberLastUsedCamera: true,
+      };
+
+      const startWithCamera = (cameraConfig) =>
+        scanner.start(cameraConfig, scannerConfig, handleScanSuccess, () => { });
+
+      try {
+        await startWithCamera({ facingMode: { exact: 'environment' } });
+      } catch (environmentError) {
+        try {
+          await startWithCamera({ facingMode: 'environment' });
+        } catch (fallbackError) {
+          try {
+            const cameras = await window.Html5Qrcode.getCameras();
+            if (!cameras?.length) throw fallbackError;
+
+            const preferredCamera =
+              cameras.find((camera) => /back|rear|environment/i.test(camera.label))
+              || cameras[0];
+
+            await startWithCamera(preferredCamera.id);
+          } catch (cameraError) {
+            console.error('QR scanner failed to start:', cameraError || fallbackError || environmentError);
+            showNotification('Unable to open camera. Please allow camera access and try again.', 'error');
+            setShowScanner(false);
+          }
+        }
+      }
+    };
+
+    const timerId = window.setTimeout(() => {
+      void startScanner();
+    }, 120);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timerId);
+      void stopScanner();
+    };
+  }, [showScanner, savedOrders]);
+
   // --- Scanner Logic ---
   useEffect(() => {
     let html5QrcodeScanner;
-    if (showScanner && window.Html5QrcodeScanner) {
+    if (false) {
       setTimeout(() => {
         html5QrcodeScanner = new window.Html5QrcodeScanner(
           "reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false
@@ -1522,10 +1655,31 @@ export default function App() {
 
       {/* --- QR SCANNER --- */}
       {showScanner && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex flex-col items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white p-4 rounded-lg w-full max-w-md">
-            <div className="flex justify-between mb-2"><h3 className="font-bold">Scan QR Code</h3><button onClick={() => setShowScanner(false)}><X /></button></div>
-            <div id="reader" className="w-full"></div>
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-md overflow-hidden rounded-[28px] border border-white/10 bg-slate-950 text-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+              <div className="flex items-center gap-3">
+                <div className="rounded-2xl bg-cyan-500/15 p-2 text-cyan-300">
+                  <Camera size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold">Scan QR Code</h3>
+                  <p className="text-xs text-slate-300">Camera opens automatically when this panel appears.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowScanner(false)}
+                className="rounded-full border border-white/10 p-2 text-slate-300 transition hover:bg-white/10 hover:text-white"
+                aria-label="Close scanner"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="space-y-3 px-4 py-4">
+              <div id="reader" className="min-h-[320px] overflow-hidden rounded-[22px] bg-black" />
+              <p className="text-center text-xs text-slate-400">Point the camera at the QR code and the order will open automatically.</p>
+            </div>
           </div>
         </div>
       )}
