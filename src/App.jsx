@@ -40,8 +40,8 @@ const db = getFirestore(app);
 const inferredAppId = firebaseConfig?.appId || firebaseConfig?.projectId || 'default-app-id';
 const rawAppId = typeof __app_id !== 'undefined' && __app_id ? String(__app_id) : inferredAppId;
 const safeAppId = rawAppId.replace(/[^a-zA-Z0-9_-]/g, '-');
-const sharedOrdersCollectionRef = collection(db, 'artifacts', safeAppId, 'orders');
-const sharedOrdersCollectionPath = ['artifacts', safeAppId, 'orders'].join('/');
+const sharedOrdersCollectionRef = collection(db, 'artifacts', safeAppId, 'public', 'data', 'orders');
+const sharedOrdersCollectionPath = ['artifacts', safeAppId, 'public', 'data', 'orders'].join('/');
 const getSharedOrderDocRef = (poNumber) => doc(sharedOrdersCollectionRef, poNumber);
 const getLegacyOrdersCollectionRef = (uid) => collection(db, 'artifacts', safeAppId, 'users', uid, 'orders');
 
