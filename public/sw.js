@@ -1,14 +1,14 @@
 const CACHE_PREFIX = 'tapav-pwa'
-const CACHE_VERSION = 'v1'
+const CACHE_VERSION = 'v2'
 const CACHE_NAME = `${CACHE_PREFIX}-${CACHE_VERSION}`
 const BASE_PATH = new URL(self.location.href).pathname.replace(/[^/]+$/, '')
 const PRECACHE_URLS = [
   BASE_PATH,
   `${BASE_PATH}manifest.webmanifest`,
-  `${BASE_PATH}icon-192.png`,
-  `${BASE_PATH}icon-512.png`,
-  `${BASE_PATH}icon-512-maskable.png`,
-  `${BASE_PATH}apple-touch-icon.png`,
+  `${BASE_PATH}tapav-icon-192-v3.png`,
+  `${BASE_PATH}tapav-icon-512-v3.png`,
+  `${BASE_PATH}tapav-icon-512-maskable-v3.png`,
+  `${BASE_PATH}tapav-apple-touch-icon-v3.png`,
 ]
 
 self.addEventListener('install', (event) => {
