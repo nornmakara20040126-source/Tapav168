@@ -65,6 +65,7 @@ const ROLES = {
 
 // ជំហាននៃការផលិត (Production Steps)
 const ROLE_PASSWORDS_STORAGE_KEY = 'tshirt_role_passwords';
+const ROLE_SESSION_STORAGE_KEY = 'tshirt_role_session';
 const DEFAULT_ROLE_PASSWORDS = {
   admin: '123',
   operation: '123',
@@ -93,6 +94,44 @@ const getRolePasswords = () => {
   } catch {
     return DEFAULT_ROLE_PASSWORDS;
   }
+};
+
+const findRoleById = (roleId) => Object.values(ROLES).find((role) => role.id === roleId) || null;
+
+const getDefaultListFilterForRole = (roleId) => (
+  roleId === 'admin' || roleId === 'operation' ? 'all' : 'my_tasks'
+);
+
+const getPersistedRoleId = () => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const storedRoleId = window.localStorage.getItem(ROLE_SESSION_STORAGE_KEY);
+    return findRoleById(storedRoleId)?.id || null;
+  } catch {
+    return null;
+  }
+};
+
+const persistRoleSession = (roleId) => {
+  if (typeof window === 'undefined') return;
+  try {
+    if (roleId) {
+      window.localStorage.setItem(ROLE_SESSION_STORAGE_KEY, roleId);
+    } else {
+      window.localStorage.removeItem(ROLE_SESSION_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore storage failures and continue with the in-memory session.
+  }
+};
+
+const getPersistedRoleSession = () => {
+  const persistedRoleId = getPersistedRoleId();
+  return {
+    isLoggedIn: Boolean(persistedRoleId),
+    currentRole: findRoleById(persistedRoleId) || ROLES.ADMIN,
+    listFilter: persistedRoleId ? getDefaultListFilterForRole(persistedRoleId) : 'all',
+  };
 };
 
 const STEPS = [
@@ -412,6 +451,10 @@ const LoginScreen = ({ onLogin, authError }) => {
               </span>
             </button>
 
+            <p className="mt-3 text-center text-xs font-medium text-slate-400">
+              This device will remember the selected role until you tap Logout.
+            </p>
+
             <div className="mt-6 pt-5 border-t border-slate-100 text-center">
               <p className="text-xs text-slate-400">&copy; 2024 T-Shirt Factory System</p>
             </div>
@@ -446,15 +489,16 @@ const TShirtMockup = ({ uploadedImage, color }) => {
 };
 
 export default function App() {
+  const [persistedRoleSession] = useState(() => getPersistedRoleSession());
   const [user, setUser] = useState(null);
   const [authError, setAuthError] = useState('');
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [currentRole, setCurrentRole] = useState(ROLES.ADMIN);
+  const [isLoggedIn, setIsLoggedIn] = useState(persistedRoleSession.isLoggedIn);
+  const [currentRole, setCurrentRole] = useState(persistedRoleSession.currentRole);
   const [saving, setSaving] = useState(false);
   const [savedOrders, setSavedOrders] = useState([]);
   const [notification, setNotification] = useState(null);
   const [viewMode, setViewMode] = useState('list');
-  const [listFilter, setListFilter] = useState('all');
+  const [listFilter, setListFilter] = useState(persistedRoleSession.listFilter);
   const [searchTerm, setSearchTerm] = useState('');
 
   // Printing & Modal States
@@ -803,11 +847,8 @@ export default function App() {
 
     setCurrentRole(newRole);
     setIsLoggedIn(true);
-    if (newRole.id === 'admin' || newRole.id === 'operation') {
-      setListFilter('all');
-    } else {
-      setListFilter('my_tasks');
-    }
+    setListFilter(getDefaultListFilterForRole(newRole.id));
+    persistRoleSession(newRole.id);
     setViewMode('list');
     showNotification(`សូមស្វាគមន៍, ${newRole.label}`, 'success');
     return true;
@@ -817,6 +858,8 @@ export default function App() {
     setMobileNavOpen(false);
     setIsLoggedIn(false);
     setCurrentRole(ROLES.ADMIN);
+    persistRoleSession('');
+    setListFilter('all');
     setViewMode('list');
   };
 
