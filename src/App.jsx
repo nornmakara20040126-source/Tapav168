@@ -510,11 +510,31 @@ export default function App() {
   const [approveModal, setApproveModal] = useState({ show: false, order: null, startStep: 0 });
   const [showScanner, setShowScanner] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const searchInputRef = useRef(null);
+  const desktopSearchInputRef = useRef(null);
+  const mobileSearchInputRef = useRef(null);
   const migratedLegacyUidsRef = useRef(new Set());
   const qrScannerRef = useRef(null);
   const qrScannerClosingRef = useRef(false);
   const closeConfirmDialog = () => setConfirmDialog({ ...EMPTY_CONFIRM_DIALOG });
+
+  const getPreferredSearchInput = () => {
+    if (typeof window === 'undefined') {
+      return mobileSearchInputRef.current || desktopSearchInputRef.current;
+    }
+
+    const prefersMobileLayout = window.matchMedia('(max-width: 767px)').matches;
+    return prefersMobileLayout
+      ? mobileSearchInputRef.current || desktopSearchInputRef.current
+      : desktopSearchInputRef.current || mobileSearchInputRef.current;
+  };
+
+  const focusSearchInput = () => {
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches) {
+      return;
+    }
+
+    getPreferredSearchInput()?.focus({ preventScroll: true });
+  };
 
   const [orderInfo, setOrderInfo] = useState({
     customer: '', phone: '', date: new Date().toISOString().split('T')[0],
@@ -736,7 +756,7 @@ export default function App() {
         } else {
           setViewMode('list');
           showNotification(`Scanned: ${normalizedText}`, 'success');
-          window.setTimeout(() => searchInputRef.current?.focus(), 120);
+          window.setTimeout(() => focusSearchInput(), 120);
         }
 
         qrScannerClosingRef.current = false;
@@ -1852,7 +1872,7 @@ export default function App() {
               </div>
               <div className="hidden relative w-full md:block md:w-72">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-                <input ref={searchInputRef} type="text" placeholder="ស្វែងរក / Scan QR..." className="w-full pl-10 p-2.5 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none shadow-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} autoFocus />
+                <input ref={desktopSearchInputRef} type="text" placeholder="ស្វែងរក / Scan QR..." className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-10 text-sm font-medium text-slate-700 outline-none shadow-sm transition focus:border-blue-300 focus:ring-4 focus:ring-blue-100" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                 <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 cursor-pointer hover:text-blue-500 transition" onClick={() => setShowScanner(true)}><ScanLine size={16} /></div>
               </div>
             </div>
@@ -1888,25 +1908,26 @@ export default function App() {
                 </div>
               </section>
 
-              <section className="sticky top-[76px] z-10 rounded-[24px] border border-white/70 bg-white/92 p-3 shadow-[0_18px_50px_-28px_rgba(15,23,42,0.45)] backdrop-blur">
+              <section className="sticky top-[76px] z-10 rounded-[26px] border border-white/80 bg-white/95 p-3.5 shadow-[0_20px_48px_-30px_rgba(15,23,42,0.4)] backdrop-blur-xl">
                 <div className="flex items-center gap-2">
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                     <input
-                      ref={searchInputRef}
+                      ref={mobileSearchInputRef}
                       type="text"
                       placeholder="Search PO or customer"
-                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                      inputMode="search"
+                      enterKeyHint="search"
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3.5 pl-10 pr-4 text-base font-medium text-slate-700 outline-none shadow-inner shadow-slate-100/80 transition focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-100"
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      autoFocus
                     />
                   </div>
                   <button type="button" onClick={() => setShowScanner(true)} className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-600 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600" aria-label="Scan QR">
                     <ScanLine size={18} />
                   </button>
                 </div>
-                <p className="mt-2 px-1 text-[11px] font-medium text-slate-400">Quick search, scan, and open orders with one tap.</p>
+                <p className="mt-2.5 px-1 text-[11px] font-medium text-slate-400">Quick search, scan, and open orders with one tap.</p>
               </section>
               {filteredOrders.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-10 text-center text-sm italic text-gray-400">
