@@ -1878,32 +1878,33 @@ export default function App() {
             </div>
 
             <div className="space-y-4 md:hidden">
-              <section className="overflow-hidden rounded-[28px] bg-gradient-to-br from-slate-950 via-blue-950 to-cyan-700 p-5 text-white shadow-[0_25px_60px_-30px_rgba(15,23,42,0.9)]">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-100/70">{currentRoleLabel}</p>
-                    <h2 className="mt-3 text-2xl font-black leading-tight">{listTitle}</h2>
-                    <p className="mt-2 text-sm leading-6 text-blue-100/80">{listDescription}</p>
+              <section className="relative overflow-hidden rounded-[24px] bg-[linear-gradient(135deg,#0f172a_0%,#172554_52%,#0f8aa6_100%)] p-4 text-white shadow-[0_22px_52px_-34px_rgba(15,23,42,0.82)]">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(125,211,252,0.22),transparent_34%),radial-gradient(circle_at_bottom_left,rgba(45,212,191,0.16),transparent_42%)]" />
+                <div className="relative flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-sky-100/65">{currentRoleLabel}</p>
+                    <h2 className="mt-2 text-[28px] font-black leading-[1.08] tracking-tight">{listTitle}</h2>
+                    <p className="mt-2 max-w-[17rem] text-[13px] leading-5 text-sky-100/74">{listDescription}</p>
                   </div>
                   {isAdmin && (
-                    <button onClick={handleNewOrder} className="inline-flex shrink-0 items-center gap-2 rounded-2xl bg-white/14 px-4 py-3 text-sm font-bold text-white shadow-lg ring-1 ring-white/20 transition hover:bg-white/20">
-                      <PlusCircle size={16} />
+                    <button onClick={handleNewOrder} className="inline-flex shrink-0 items-center gap-2 rounded-[20px] bg-white/12 px-3.5 py-2.5 text-sm font-bold text-white shadow-lg ring-1 ring-white/18 backdrop-blur transition hover:bg-white/18">
+                      <PlusCircle size={15} />
                       New
                     </button>
                   )}
                 </div>
-                <div className="mt-5 grid grid-cols-3 gap-2">
-                  <div className="rounded-2xl bg-white/12 px-3 py-3 backdrop-blur">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-100/70">All</p>
-                    <p className="mt-2 text-2xl font-black">{savedOrders.length}</p>
+                <div className="relative mt-4 grid grid-cols-3 gap-2">
+                  <div className="rounded-[18px] border border-white/12 bg-white/10 px-3 py-2.5 backdrop-blur-md">
+                    <p className="text-[9px] uppercase tracking-[0.18em] text-sky-100/70">All</p>
+                    <p className="mt-1.5 text-[26px] font-black leading-none">{savedOrders.length}</p>
                   </div>
-                  <div className="rounded-2xl bg-white/12 px-3 py-3 backdrop-blur">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-100/70">Live</p>
-                    <p className="mt-2 text-2xl font-black">{inProductionCount}</p>
+                  <div className="rounded-[18px] border border-white/12 bg-white/10 px-3 py-2.5 backdrop-blur-md">
+                    <p className="text-[9px] uppercase tracking-[0.18em] text-sky-100/70">Live</p>
+                    <p className="mt-1.5 text-[26px] font-black leading-none">{inProductionCount}</p>
                   </div>
-                  <div className="rounded-2xl bg-white/12 px-3 py-3 backdrop-blur">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-100/70">{mobileFocusLabel}</p>
-                    <p className="mt-2 text-2xl font-black">{mobileFocusCount}</p>
+                  <div className="rounded-[18px] border border-white/12 bg-white/10 px-3 py-2.5 backdrop-blur-md">
+                    <p className="text-[9px] uppercase tracking-[0.18em] text-sky-100/70">{mobileFocusLabel}</p>
+                    <p className="mt-1.5 text-[26px] font-black leading-none">{mobileFocusCount}</p>
                   </div>
                 </div>
               </section>
