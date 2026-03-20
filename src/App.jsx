@@ -1263,7 +1263,7 @@ export default function App() {
 
   const getActionButtonClassName = (tone, variant = 'desktop') => {
     const baseClasses = variant === 'mobile'
-      ? 'inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold text-white shadow-sm transition active:scale-[0.98]'
+      ? 'inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-bold text-white shadow-sm transition active:scale-[0.98]'
       : 'inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-bold text-white shadow-sm transition';
 
     const toneClasses = tone === 'purple'
@@ -1937,7 +1937,7 @@ export default function App() {
                 const statusMeta = getOrderStatusMeta(order);
                 const { displayStatus, action } = getOrderListUiMeta(order);
                 return (
-                  <div key={order.id} className="overflow-hidden rounded-[26px] border border-white/70 bg-white/95 shadow-[0_20px_45px_-32px_rgba(15,23,42,0.55)]">
+                  <div key={order.id} className="overflow-hidden rounded-[24px] border border-white/75 bg-white/95 shadow-[0_18px_38px_-30px_rgba(15,23,42,0.45)]">
                     <div
                       role="button"
                       tabIndex={0}
@@ -1948,34 +1948,35 @@ export default function App() {
                           handleLoad(order);
                         }
                       }}
-                      className="cursor-pointer p-4"
+                      className="cursor-pointer p-3.5"
                     >
-                      <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start justify-between gap-2.5">
                         <div className="min-w-0">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">PO Number</p>
-                          <p className="mt-1 truncate font-mono text-xl font-black text-blue-700">{order.orderInfo.poNumber}</p>
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">PO Number</p>
+                          <p className="mt-1 truncate font-mono text-lg font-black text-blue-700">{order.orderInfo.poNumber}</p>
                         </div>
-                        <span className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-bold shadow-sm ${statusMeta.className}`}>{statusMeta.label}</span>
+                        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold shadow-sm ${statusMeta.className}`}>{statusMeta.label}</span>
                       </div>
-                      <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-                        <div className="rounded-2xl bg-slate-50 px-3 py-3">
-                          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Customer</p>
-                          <p className="mt-2 font-semibold text-slate-900">{order.orderInfo.customer || '-'}</p>
+                      <div className="mt-3 rounded-[20px] border border-slate-100 bg-slate-50/85 p-2.5">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">Customer</p>
+                            <p className="mt-1 truncate text-sm font-semibold text-slate-900">{order.orderInfo.customer || '-'}</p>
+                          </div>
+                          <div className="rounded-2xl bg-white px-3 py-2 text-right shadow-sm">
+                            <p className="text-[10px] uppercase tracking-[0.16em] text-slate-400">Qty</p>
+                            <p className="mt-1 text-sm font-black text-slate-900">{order.orderInfo.quantity} pcs</p>
+                          </div>
                         </div>
-                        <div className="rounded-2xl bg-slate-50 px-3 py-3">
-                          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Quantity</p>
-                          <p className="mt-2 font-black text-slate-900">{order.orderInfo.quantity} pcs</p>
-                        </div>
-                        <div className="col-span-2 rounded-2xl bg-slate-50 px-3 py-3">
-                          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Deadline</p>
-                          <p className="mt-2 font-semibold text-slate-900">{order.orderInfo.deadline || '-'}</p>
+                        <div className="mt-2 flex items-center justify-between gap-3 rounded-2xl bg-white px-3 py-2.5 shadow-sm">
+                          <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">Deadline</p>
+                          <p className="text-sm font-semibold text-slate-900">{order.orderInfo.deadline || '-'}</p>
                         </div>
                       </div>
-                      <div className="mt-4 text-xs font-medium text-slate-500">Quick actions are ready below.</div>
                     </div>
-                    <div className="mt-4 border-t border-slate-100 pt-4">
+                    <div className="border-t border-slate-100 px-3.5 py-3">
                       <div className={`grid gap-2 ${action ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                        <button type="button" onClick={() => handleLoad(order)} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100">
+                        <button type="button" onClick={() => handleLoad(order)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100">
                           <Eye size={16} />
                           Open
                         </button>
@@ -1986,19 +1987,19 @@ export default function App() {
                           </button>
                         ) : null}
                       </div>
-                      <div className="mt-3 rounded-2xl bg-slate-50 px-3 py-3">
-                        <p className="text-[10px] uppercase tracking-[0.22em] text-slate-400">Workflow</p>
-                        <div className="mt-2 flex items-center justify-between gap-3">
+                      <div className="mt-2.5 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2.5">
+                        <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Workflow</p>
+                        <div className="mt-1.5 flex items-center justify-between gap-3">
                           <div>{displayStatus}</div>
-                          <div className="rounded-full bg-white p-2 text-slate-400 shadow-sm">
-                            <ChevronRight size={16} />
+                          <div className="rounded-full bg-white p-1.5 text-slate-400 shadow-sm">
+                            <ChevronRight size={15} />
                           </div>
                         </div>
                       </div>
                     </div>
                     {isAdmin && (
-                      <div className="mt-3 border-t border-slate-100 pt-3">
-                        <button onClick={(e) => handleDelete(order.id, e)} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600 transition hover:bg-red-100">
+                      <div className="border-t border-slate-100 px-3.5 py-3 pt-0">
+                        <button onClick={(e) => handleDelete(order.id, e)} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-100">
                           <Trash2 size={16} />
                           លុប Order
                         </button>
