@@ -4,7 +4,7 @@ import {
   Clock, User, Phone, FileText, Upload, Image as ImageIcon, Palette,
   Save, History, RefreshCw, Trash2, AlertCircle, Shield, Lock, Search,
   ArrowLeft, LayoutList, Calculator, QrCode, FileDown, Play, CheckSquare,
-  X, Home, PlusCircle, Settings, LogOut, ChevronRight, Eye, Inbox, ArrowRight, ScanLine, AlertTriangle, Camera, Edit3, Grid, Ruler, Box, Send, CornerDownRight
+  X, Home, PlusCircle, Settings, LogOut, Eye, Inbox, ArrowRight, ScanLine, AlertTriangle, Camera, Edit3, Grid, Ruler, Box, Send, CornerDownRight
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "firebase/auth";
@@ -1935,7 +1935,7 @@ export default function App() {
                 </div>
               ) : filteredOrders.map((order) => {
                 const statusMeta = getOrderStatusMeta(order);
-                const { displayStatus, action } = getOrderListUiMeta(order);
+                const { action } = getOrderListUiMeta(order);
                 return (
                   <div key={order.id} className="overflow-hidden rounded-[24px] border border-white/75 bg-white/95 shadow-[0_18px_38px_-30px_rgba(15,23,42,0.45)]">
                     <div
@@ -1991,15 +1991,6 @@ export default function App() {
                             {action.label}
                           </button>
                         ) : null}
-                      </div>
-                      <div className="mt-2.5 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2.5">
-                        <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Workflow</p>
-                        <div className="mt-1.5 flex items-center justify-between gap-3">
-                          <div>{displayStatus}</div>
-                          <div className="rounded-full bg-white p-1.5 text-slate-400 shadow-sm">
-                            <ChevronRight size={15} />
-                          </div>
-                        </div>
                       </div>
                     </div>
                     {false && isAdmin && (
