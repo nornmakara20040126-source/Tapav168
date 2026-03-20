@@ -512,6 +512,9 @@ export default function App() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const desktopSearchInputRef = useRef(null);
   const mobileSearchInputRef = useRef(null);
+  const notificationTimeoutRef = useRef(null);
+  const previousReadyTaskKeysRef = useRef(new Set());
+  const hasInitializedReadyTasksRef = useRef(false);
   const migratedLegacyUidsRef = useRef(new Set());
   const qrScannerRef = useRef(null);
   const qrScannerClosingRef = useRef(false);
@@ -921,8 +924,14 @@ export default function App() {
   };
 
   const showNotification = (msg, type = 'success') => {
+    if (notificationTimeoutRef.current) {
+      window.clearTimeout(notificationTimeoutRef.current);
+    }
     setNotification({ msg, type });
-    setTimeout(() => setNotification(null), 3000);
+    notificationTimeoutRef.current = window.setTimeout(() => {
+      setNotification(null);
+      notificationTimeoutRef.current = null;
+    }, 3000);
   };
 
   const sendTelegramNotification = async (text, { chatId } = {}) => {
@@ -1116,6 +1125,41 @@ export default function App() {
     [savedOrders]
   );
 
+  const readyInboxTasks = useMemo(() => {
+    if (!isLoggedIn || isAdmin) return [];
+
+    if (isOperation) {
+      return savedOrders
+        .filter((order) => !order.orderInfo.status || order.orderInfo.status === 'pending_operation')
+        .map((order) => ({
+          key: `approve:${order.id}`,
+          poNumber: String(order.orderInfo.poNumber || order.id || ''),
+          label: 'Awaiting approval',
+        }));
+    }
+
+    return savedOrders.flatMap((order) => {
+      if (order.orderInfo.status !== 'production') return [];
+
+      const sData = order.stepsData || {};
+      const startStep = order.orderInfo.startStep || 0;
+
+      return STEPS.flatMap((step, index) => {
+        const isMyRole = currentRole.permissions.includes(index);
+        const isPending = !sData[index] || sData[index].status === 'pending';
+        const ready = isStepReady(index, sData, startStep);
+
+        if (!isMyRole || !isPending || !ready) return [];
+
+        return [{
+          key: `${order.id}:${index}`,
+          poNumber: String(order.orderInfo.poNumber || order.id || ''),
+          label: step.label,
+        }];
+      });
+    });
+  }, [savedOrders, currentRole, isAdmin, isLoggedIn, isOperation]);
+
   const currentRoleLabel = currentRole.label.split(' (')[0];
   const listTitle =
     listFilter === 'my_tasks'
@@ -1138,6 +1182,42 @@ export default function App() {
 
   const mobileFocusCount = isAdmin || isOperation ? pendingApprovalCount : pendingTasksCount;
   const mobileFocusLabel = isAdmin || isOperation ? 'Awaiting Review' : 'My Tasks';
+
+  useEffect(() => {
+    if (!isLoggedIn) {
+      previousReadyTaskKeysRef.current = new Set();
+      hasInitializedReadyTasksRef.current = false;
+      return;
+    }
+
+    const currentKeys = new Set(readyInboxTasks.map((task) => task.key));
+
+    if (!hasInitializedReadyTasksRef.current) {
+      previousReadyTaskKeysRef.current = currentKeys;
+      hasInitializedReadyTasksRef.current = true;
+      return;
+    }
+
+    const newTasks = readyInboxTasks.filter((task) => !previousReadyTaskKeysRef.current.has(task.key));
+    previousReadyTaskKeysRef.current = currentKeys;
+
+    if (!newTasks.length) return;
+
+    if (newTasks.length === 1) {
+      const [task] = newTasks;
+      showNotification(`ការងារថ្មីមកដល់: ${task.poNumber} - ${task.label}`, 'info');
+      return;
+    }
+
+    const preview = newTasks
+      .slice(0, 2)
+      .map((task) => task.poNumber)
+      .filter(Boolean)
+      .join(', ');
+    const extraCount = newTasks.length > 2 ? ` +${newTasks.length - 2}` : '';
+
+    showNotification(`មានការងារថ្មី ${newTasks.length} មកដល់${preview ? `: ${preview}${extraCount}` : ''}`, 'info');
+  }, [readyInboxTasks, isLoggedIn]);
 
   const getOrderStatusMeta = (order) => {
     const status = order.orderInfo.status || 'pending_operation';
@@ -1610,8 +1690,22 @@ export default function App() {
 
       {/* --- NOTIFICATION --- */}
       {notification && (
-        <div className={`fixed top-4 left-1/2 z-50 flex w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 items-center gap-2 rounded-lg px-4 py-3 text-sm font-bold text-white shadow-lg animate-bounce ${notification.type === 'error' ? 'bg-red-500' : notification.type === 'info' ? 'bg-blue-600' : 'bg-green-600'} print:hidden`}>
-          {notification.type === 'error' ? <AlertCircle size={20} /> : <CheckCircle size={20} />} {notification.msg}
+        <div className={`fixed top-4 left-1/2 z-50 flex w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 items-center gap-2 rounded-lg px-4 py-3 text-sm font-bold text-white shadow-lg animate-bounce ${
+          notification.type === 'error'
+            ? 'bg-red-500'
+            : notification.type === 'warning'
+              ? 'bg-amber-500'
+              : notification.type === 'info'
+                ? 'bg-blue-600'
+                : 'bg-green-600'
+        } print:hidden`}>
+          {notification.type === 'error'
+            ? <AlertCircle size={20} />
+            : notification.type === 'warning'
+              ? <AlertTriangle size={20} />
+              : notification.type === 'info'
+                ? <Inbox size={20} />
+                : <CheckCircle size={20} />} {notification.msg}
         </div>
       )}
 
