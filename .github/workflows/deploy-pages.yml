@@ -41,7 +41,9 @@ jobs:
           VITE_TELEGRAM_ROLE_CHAT_IDS: ${{ vars.VITE_TELEGRAM_ROLE_CHAT_IDS }}
         shell: bash
         run: |
-          VITE_BASE_PATH="/${GITHUB_REPOSITORY#*/}/" npm run build
+          export VITE_BASE_PATH="/${GITHUB_REPOSITORY#*/}/"
+          export VITE_TELEGRAM_PROXY_URL="${VITE_TELEGRAM_PROXY_URL:-https://tapav-telegram-proxy.onrender.com/telegram/send}"
+          npm run build
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
