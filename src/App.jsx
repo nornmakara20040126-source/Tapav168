@@ -1975,12 +1975,17 @@ export default function App() {
                       </div>
                     </div>
                     <div className="border-t border-slate-100 px-3.5 py-3">
-                      <div className={`grid gap-2 ${action ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                        <button type="button" onClick={() => handleLoad(order)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100">
+                      <div className={`grid gap-2 ${(action || isAdmin) ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                        <button type="button" onClick={() => handleLoad(order)} className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 ${isAdmin ? 'order-2' : ''}`}>
                           <Eye size={16} />
                           Open
                         </button>
-                        {action ? (
+                        {isAdmin ? (
+                          <button type="button" onClick={(e) => handleDelete(order.id, e)} className="order-1 flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-100">
+                            <Trash2 size={16} />
+                            លុប Order
+                          </button>
+                        ) : action ? (
                           <button type="button" onClick={action.onPress} className={getActionButtonClassName(action.tone, 'mobile')}>
                             <action.IconComponent size={16} />
                             {action.label}
@@ -1997,7 +2002,7 @@ export default function App() {
                         </div>
                       </div>
                     </div>
-                    {isAdmin && (
+                    {false && isAdmin && (
                       <div className="border-t border-slate-100 px-3.5 py-3 pt-0">
                         <button onClick={(e) => handleDelete(order.id, e)} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-100">
                           <Trash2 size={16} />
