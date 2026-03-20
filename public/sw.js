@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'tapav-pwa'
-const CACHE_VERSION = 'v2'
+const CACHE_VERSION = 'v3'
 const CACHE_NAME = `${CACHE_PREFIX}-${CACHE_VERSION}`
 const BASE_PATH = new URL(self.location.href).pathname.replace(/[^/]+$/, '')
 const PRECACHE_URLS = [
@@ -29,6 +29,12 @@ self.addEventListener('activate', (event) => {
       )
     ).then(() => self.clients.claim())
   )
+})
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting()
+  }
 })
 
 const networkFirst = async (request) => {

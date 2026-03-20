@@ -25,18 +25,49 @@ function AppShell() {
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return undefined
 
+    let hasRefreshed = false
+    const handleControllerChange = () => {
+      if (hasRefreshed) return
+      hasRefreshed = true
+      window.location.reload()
+    }
+
     const registerServiceWorker = async () => {
       try {
-        await navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, {
+        const registration = await navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, {
           scope: import.meta.env.BASE_URL,
         })
+
+        if (registration.waiting) {
+          registration.waiting.postMessage({ type: 'SKIP_WAITING' })
+        }
+
+        registration.addEventListener('updatefound', () => {
+          const installingWorker = registration.installing
+          if (!installingWorker) return
+
+          installingWorker.addEventListener('statechange', () => {
+            if (
+              installingWorker.state === 'installed' &&
+              navigator.serviceWorker.controller
+            ) {
+              installingWorker.postMessage({ type: 'SKIP_WAITING' })
+            }
+          })
+        })
+
+        void registration.update()
       } catch (error) {
         console.error('Service worker registration failed:', error)
       }
     }
 
+    navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange)
     void registerServiceWorker()
-    return undefined
+
+    return () => {
+      navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange)
+    }
   }, [])
 
   useEffect(() => {

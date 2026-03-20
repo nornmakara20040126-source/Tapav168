@@ -297,6 +297,8 @@ const TELEGRAM_ROLE_CHAT_IDS =
     })()
     : {};
 
+const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
 const PO_NUMBER_PATTERN = /^PO(\d{5})$/i;
 const formatPONumber = (sequence) => `PO${String(sequence).padStart(5, '0')}`;
 
@@ -936,16 +938,32 @@ export default function App() {
 
   const sendTelegramNotification = async (text, { chatId } = {}) => {
     if (!TELEGRAM_PROXY_URL || !text) return;
-    try {
-      const payload = { text };
-      if (chatId) payload.chat_id = String(chatId);
-      await fetch(TELEGRAM_PROXY_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-    } catch (error) {
-      console.error('Telegram notification failed:', error);
+    const payload = { text };
+    if (chatId) payload.chat_id = String(chatId);
+
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
+        const response = await fetch(TELEGRAM_PROXY_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          keepalive: true,
+          mode: 'cors',
+        });
+        const result = await response.json().catch(() => null);
+
+        if (response.ok && (!result || result.ok !== false)) {
+          return;
+        }
+
+        console.error('Telegram notification failed:', result?.error || response.statusText);
+      } catch (error) {
+        console.error('Telegram notification failed:', error);
+      }
+
+      if (attempt < 2) {
+        await wait(2500);
+      }
     }
   };
 
