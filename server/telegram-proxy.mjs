@@ -26,7 +26,7 @@ loadDotEnv();
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const DEFAULT_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-const PORT = Number(process.env.TELEGRAM_PORT || 8787);
+const PORT = Number(process.env.PORT || process.env.TELEGRAM_PORT || 8787);
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -136,4 +136,3 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`[telegram-proxy] running on http://localhost:${PORT}`);
 });
-

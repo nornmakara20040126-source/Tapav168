@@ -42,6 +42,14 @@ Examples:
 
 If you do not provide `VITE_TELEGRAM_PROXY_URL`, the GitHub Pages workflow builds with Telegram disabled.
 
+To enable Telegram on GitHub Pages:
+
+1. Deploy `server/telegram-proxy.mjs` or `netlify/functions/telegram-send.mjs` to a public HTTPS host.
+2. In GitHub, open `Settings -> Secrets and variables -> Actions -> Variables`.
+3. Add `VITE_TELEGRAM_PROXY_URL` with your public proxy URL, for example `https://your-proxy.example.com/telegram/send`.
+4. Optional: add `VITE_TELEGRAM_ROLE_CHAT_IDS` if you want different Telegram chat IDs per role.
+5. Push to `main` again so the Pages workflow rebuilds with Telegram enabled.
+
 ## Local development
 
 Install dependencies:
@@ -92,6 +100,24 @@ Netlify production uses:
 
 - `netlify/functions/telegram-send.mjs`
 - redirect `/telegram/send -> /.netlify/functions/telegram-send`
+
+### Option C: Render
+
+This repo now includes `render.yaml` for the Telegram proxy backend.
+
+Render service settings:
+
+- start command: `node server/telegram-proxy.mjs`
+- health check: `/health`
+- required environment variables:
+  - `TELEGRAM_BOT_TOKEN`
+  - `TELEGRAM_CHAT_ID`
+
+After Render gives you a public URL such as `https://your-app.onrender.com`, set:
+
+```env
+VITE_TELEGRAM_PROXY_URL=https://your-app.onrender.com/telegram/send
+```
 
 ## Production notes
 
