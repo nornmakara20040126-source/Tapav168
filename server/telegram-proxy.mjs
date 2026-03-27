@@ -34,6 +34,19 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
+const debugStatus = {
+  totalRequests: 0,
+  totalSent: 0,
+  totalErrors: 0,
+  lastRequestAt: null,
+  lastSuccessAt: null,
+  lastErrorAt: null,
+  lastOrigin: null,
+  lastPayloadKeys: [],
+  lastTextLength: 0,
+  lastError: null,
+};
+
 const sendJson = (res, statusCode, payload) => {
   res.writeHead(statusCode, {
     'Content-Type': 'application/json; charset=utf-8',
@@ -75,8 +88,16 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'GET' && url.pathname === '/debug/status') {
+    sendJson(res, 200, { ok: true, ...debugStatus });
+    return;
+  }
+
   if (req.method === 'POST' && url.pathname === '/telegram/send') {
     if (!TELEGRAM_BOT_TOKEN) {
+      debugStatus.totalErrors += 1;
+      debugStatus.lastErrorAt = new Date().toISOString();
+      debugStatus.lastError = 'Missing TELEGRAM_BOT_TOKEN in environment';
       sendJson(res, 500, {
         ok: false,
         error: 'Missing TELEGRAM_BOT_TOKEN in environment',
@@ -87,15 +108,28 @@ const server = http.createServer(async (req, res) => {
     try {
       const raw = await readBody(req);
       const body = raw ? JSON.parse(raw) : {};
-      const text = String(body.text || '').trim();
+      const text = String(body.text || body.message || '').trim();
       const chatId = String(body.chat_id || DEFAULT_CHAT_ID || '').trim();
       const parseMode = body.parse_mode || undefined;
 
+      debugStatus.totalRequests += 1;
+      debugStatus.lastRequestAt = new Date().toISOString();
+      debugStatus.lastOrigin = req.headers.origin || null;
+      debugStatus.lastPayloadKeys = body && typeof body === 'object' ? Object.keys(body) : [];
+      debugStatus.lastTextLength = text.length;
+      debugStatus.lastError = null;
+
       if (!text) {
+        debugStatus.totalErrors += 1;
+        debugStatus.lastErrorAt = new Date().toISOString();
+        debugStatus.lastError = 'text is required';
         sendJson(res, 400, { ok: false, error: 'text is required' });
         return;
       }
       if (!chatId) {
+        debugStatus.totalErrors += 1;
+        debugStatus.lastErrorAt = new Date().toISOString();
+        debugStatus.lastError = 'chat_id is required (or set TELEGRAM_CHAT_ID)';
         sendJson(res, 400, {
           ok: false,
           error: 'chat_id is required (or set TELEGRAM_CHAT_ID)',
@@ -118,13 +152,21 @@ const server = http.createServer(async (req, res) => {
 
       const apiData = await apiRes.json();
       if (!apiRes.ok || !apiData.ok) {
+        debugStatus.totalErrors += 1;
+        debugStatus.lastErrorAt = new Date().toISOString();
+        debugStatus.lastError = apiData.description || 'Telegram API error';
         sendJson(res, 502, { ok: false, error: apiData.description || 'Telegram API error' });
         return;
       }
 
+      debugStatus.totalSent += 1;
+      debugStatus.lastSuccessAt = new Date().toISOString();
       sendJson(res, 200, { ok: true, result: apiData.result?.message_id || null });
       return;
     } catch (error) {
+      debugStatus.totalErrors += 1;
+      debugStatus.lastErrorAt = new Date().toISOString();
+      debugStatus.lastError = error.message || 'Server error';
       sendJson(res, 500, { ok: false, error: error.message || 'Server error' });
       return;
     }
