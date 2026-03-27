@@ -299,6 +299,25 @@ const TELEGRAM_ROLE_CHAT_IDS =
 
 const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
+const getTelegramHealthUrl = (proxyUrl) => {
+  if (!proxyUrl) return '';
+
+  try {
+    const baseOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+    const url = new URL(proxyUrl, baseOrigin);
+
+    if (url.pathname.endsWith('/telegram/send')) {
+      url.pathname = url.pathname.replace(/\/telegram\/send$/, '/health');
+    } else {
+      url.pathname = '/health';
+    }
+
+    return url.toString();
+  } catch {
+    return '';
+  }
+};
+
 const PO_NUMBER_PATTERN = /^PO(\d{5})$/i;
 const formatPONumber = (sequence) => `PO${String(sequence).padStart(5, '0')}`;
 
@@ -517,6 +536,7 @@ export default function App() {
   const notificationTimeoutRef = useRef(null);
   const previousReadyTaskKeysRef = useRef(new Set());
   const hasInitializedReadyTasksRef = useRef(false);
+  const telegramProxyWarmupPromiseRef = useRef(null);
   const migratedLegacyUidsRef = useRef(new Set());
   const qrScannerRef = useRef(null);
   const qrScannerClosingRef = useRef(false);
@@ -539,6 +559,49 @@ export default function App() {
     }
 
     getPreferredSearchInput()?.focus({ preventScroll: true });
+  };
+
+  const warmTelegramProxy = async () => {
+    if (!TELEGRAM_PROXY_URL) return false;
+    if (telegramProxyWarmupPromiseRef.current) {
+      return telegramProxyWarmupPromiseRef.current;
+    }
+
+    const healthUrl = getTelegramHealthUrl(TELEGRAM_PROXY_URL);
+    if (!healthUrl) return false;
+
+    const warmupPromise = (async () => {
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        try {
+          const response = await fetch(healthUrl, {
+            method: 'GET',
+            cache: 'no-store',
+            mode: 'cors',
+          });
+
+          if (response.ok) {
+            return true;
+          }
+        } catch (error) {
+          console.error('Telegram proxy warm-up failed:', error);
+        }
+
+        if (attempt < 2) {
+          await wait(4000);
+        }
+      }
+
+      return false;
+    })();
+
+    telegramProxyWarmupPromiseRef.current = warmupPromise;
+    const isReady = await warmupPromise;
+
+    if (!isReady) {
+      telegramProxyWarmupPromiseRef.current = null;
+    }
+
+    return isReady;
   };
 
   const [orderInfo, setOrderInfo] = useState({
@@ -583,6 +646,11 @@ export default function App() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!TELEGRAM_PROXY_URL) return;
+    void warmTelegramProxy();
+  }, []);
+
   // --- Auth & Data Loading ---
   useEffect(() => {
     const initAuth = async () => {
@@ -604,6 +672,11 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, setUser);
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!isLoggedIn || !TELEGRAM_PROXY_URL) return;
+    void warmTelegramProxy();
+  }, [isLoggedIn, currentRole.id]);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -938,10 +1011,11 @@ export default function App() {
 
   const sendTelegramNotification = async (text, { chatId } = {}) => {
     if (!TELEGRAM_PROXY_URL || !text) return;
+    await warmTelegramProxy();
     const payload = { text };
     if (chatId) payload.chat_id = String(chatId);
 
-    for (let attempt = 1; attempt <= 2; attempt += 1) {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
         const response = await fetch(TELEGRAM_PROXY_URL, {
           method: 'POST',
@@ -961,8 +1035,8 @@ export default function App() {
         console.error('Telegram notification failed:', error);
       }
 
-      if (attempt < 2) {
-        await wait(2500);
+      if (attempt < 3) {
+        await wait(3000);
       }
     }
   };
