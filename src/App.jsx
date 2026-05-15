@@ -4,7 +4,7 @@ import {
   Clock, User, Phone, FileText, Upload, Image as ImageIcon, Palette,
   Save, History, RefreshCw, Trash2, AlertCircle, Shield, Lock, Search,
   ArrowLeft, LayoutList, Calculator, QrCode, FileDown, Play, CheckSquare,
-  X, Home, PlusCircle, Settings, LogOut, Eye, Inbox, ArrowRight, ScanLine, AlertTriangle, Camera, Edit3, Grid, Ruler, Box, Send, CornerDownRight
+  X, Home, PlusCircle, Settings, LogOut, Eye, Inbox, ArrowRight, ScanLine, AlertTriangle, Camera, Edit3, Grid, Ruler, Box, Send, CornerDownRight, Archive
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "firebase/auth";
@@ -65,6 +65,7 @@ const ROLES = {
 
 // ជំហាននៃការផលិត (Production Steps)
 const ROLE_PASSWORDS_STORAGE_KEY = 'tshirt_role_passwords';
+const ROLE_ENABLED_STORAGE_KEY = 'tshirt_role_enabled';
 const ROLE_SESSION_STORAGE_KEY = 'tshirt_role_session';
 const DEFAULT_ROLE_PASSWORDS = {
   admin: '123',
@@ -82,6 +83,9 @@ const DEFAULT_ROLE_PASSWORDS = {
   ironing_pack: '123',
   delivery: '123',
 };
+const DEFAULT_ROLE_ENABLED = Object.fromEntries(
+  Object.values(ROLES).map((role) => [role.id, true])
+);
 
 const getRolePasswords = () => {
   if (typeof window === 'undefined') return DEFAULT_ROLE_PASSWORDS;
@@ -94,6 +98,29 @@ const getRolePasswords = () => {
   } catch {
     return DEFAULT_ROLE_PASSWORDS;
   }
+};
+
+const getRoleEnabled = () => {
+  if (typeof window === 'undefined') return DEFAULT_ROLE_ENABLED;
+  try {
+    const raw = window.localStorage.getItem(ROLE_ENABLED_STORAGE_KEY);
+    if (!raw) return DEFAULT_ROLE_ENABLED;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return DEFAULT_ROLE_ENABLED;
+    return { ...DEFAULT_ROLE_ENABLED, ...parsed, admin: true };
+  } catch {
+    return DEFAULT_ROLE_ENABLED;
+  }
+};
+
+const persistRolePasswords = (passwords) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(ROLE_PASSWORDS_STORAGE_KEY, JSON.stringify(passwords));
+};
+
+const persistRoleEnabled = (enabled) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(ROLE_ENABLED_STORAGE_KEY, JSON.stringify({ ...enabled, admin: true }));
 };
 
 const findRoleById = (roleId) => Object.values(ROLES).find((role) => role.id === roleId) || null;
@@ -342,6 +369,8 @@ const EMPTY_CONFIRM_DIALOG = {
   isDangerous: false,
   nextRoleOptions: [],
   selectedNextRole: '',
+  handoffNote: '',
+  showHandoffNote: false,
 };
 
 const sanitizeForFirestore = (value) => {
@@ -371,7 +400,9 @@ const LoginScreen = ({ onLogin, authError }) => {
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const selectedRoleInfo = Object.values(ROLES).find((role) => role.id === selectedRole);
+  const enabledRoles = getRoleEnabled();
+  const loginRoles = Object.values(ROLES).filter((role) => role.id === 'admin' || enabledRoles[role.id] !== false);
+  const selectedRoleInfo = loginRoles.find((role) => role.id === selectedRole) || loginRoles[0];
 
   const submitLogin = () => {
     const ok = onLogin(selectedRole, password);
@@ -387,6 +418,12 @@ const LoginScreen = ({ onLogin, authError }) => {
     setLoginError('');
     setPassword('');
   }, [selectedRole]);
+
+  useEffect(() => {
+    if (!loginRoles.some((role) => role.id === selectedRole)) {
+      setSelectedRole(loginRoles[0]?.id || 'admin');
+    }
+  }, [selectedRole, loginRoles]);
 
   return (
     <div className="min-h-screen bg-slate-100 relative overflow-hidden font-sans">
@@ -419,7 +456,7 @@ const LoginScreen = ({ onLogin, authError }) => {
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-3">Role</label>
               <div className="grid grid-cols-1 gap-2 max-h-72 overflow-y-auto pr-1">
-                {Object.values(ROLES).map((role) => (
+                {loginRoles.map((role) => (
                   <button
                     key={role.id}
                     onClick={() => setSelectedRole(role.id)}
@@ -521,6 +558,10 @@ export default function App() {
   const [viewMode, setViewMode] = useState('list');
   const [listFilter, setListFilter] = useState(persistedRoleSession.listFilter);
   const [searchTerm, setSearchTerm] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
+  const [selectedCustomer, setSelectedCustomer] = useState('');
+  const [rolePasswords, setRolePasswords] = useState(() => getRolePasswords());
+  const [roleEnabled, setRoleEnabled] = useState(() => getRoleEnabled());
 
   // Printing & Modal States
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
@@ -938,6 +979,11 @@ export default function App() {
     if (!newRole) return false;
 
     const rolePasswords = getRolePasswords();
+    const enabledRoles = getRoleEnabled();
+    if (newRole.id !== 'admin' && enabledRoles[newRole.id] === false) {
+      return false;
+    }
+
     const expectedPassword = String(rolePasswords[newRole.id] ?? '');
     if (String(password ?? '') !== expectedPassword) {
       return false;
@@ -961,6 +1007,29 @@ export default function App() {
     persistRoleSession('');
     setListFilter('all');
     setViewMode('list');
+  };
+
+  const updateRolePassword = (roleId, password) => {
+    if (!isAdmin) return;
+    const nextPasswords = { ...rolePasswords, [roleId]: password };
+    setRolePasswords(nextPasswords);
+    persistRolePasswords(nextPasswords);
+  };
+
+  const updateRoleEnabled = (roleId, enabled) => {
+    if (!isAdmin || roleId === 'admin') return;
+    const nextEnabled = { ...roleEnabled, [roleId]: enabled, admin: true };
+    setRoleEnabled(nextEnabled);
+    persistRoleEnabled(nextEnabled);
+  };
+
+  const resetRoleLogins = () => {
+    if (!isAdmin) return;
+    setRolePasswords(DEFAULT_ROLE_PASSWORDS);
+    setRoleEnabled(DEFAULT_ROLE_ENABLED);
+    persistRolePasswords(DEFAULT_ROLE_PASSWORDS);
+    persistRoleEnabled(DEFAULT_ROLE_ENABLED);
+    showNotification('Role login settings reset.', 'success');
   };
 
   const handleDownloadPDF = async () => {
@@ -1156,6 +1225,12 @@ export default function App() {
       order.orderInfo.poNumber.toLowerCase().includes(searchTerm.toLowerCase());
     if (!matchesSearch) return false;
 
+    if (dateFilter && order.orderInfo.deadline !== dateFilter) return false;
+
+    const deliveryStepIndex = STEPS.length - 1;
+    const isCompletedOrder = order?.orderInfo?.status === 'completed' || order?.stepsData?.[deliveryStepIndex]?.status === 'completed';
+    if (listFilter !== 'history' && isCompletedOrder) return false;
+
     const status = order.orderInfo.status || 'pending_operation';
     const sData = order.stepsData || {};
     const startStep = order.orderInfo.startStep || 0;
@@ -1188,6 +1263,235 @@ export default function App() {
 
     return true;
   });
+
+  const reportOrders = savedOrders;
+
+  const getOrderSizeSummary = (order) => {
+    const sizes = order?.orderInfo?.sizes || {};
+    return Object.entries(sizes)
+      .flatMap(([category, sizeMap]) =>
+        Object.entries(sizeMap || {})
+          .filter(([, value]) => (parseInt(value) || 0) > 0)
+          .map(([size, value]) => `${category} ${size}: ${value}`)
+      )
+      .join('; ');
+  };
+
+  const getReportStatusLabel = (order) => {
+    const orderStatus = order?.orderInfo?.status || 'pending_operation';
+    if (orderStatus === 'pending_operation') return 'រង់ចាំ Operation';
+
+    const sData = order?.stepsData || {};
+    let latestStepIndex = -1;
+
+    Object.keys(sData).forEach((key) => {
+      const parsedIndex = parseInt(key, 10);
+      if (Number.isFinite(parsedIndex) && parsedIndex > latestStepIndex) {
+        latestStepIndex = parsedIndex;
+      }
+    });
+
+    if (latestStepIndex === -1) return 'កំពុងផលិត';
+
+    const latestStep = sData[latestStepIndex] || {};
+    const stepLabel = STEPS[latestStepIndex]?.label || `Step ${latestStepIndex + 1}`;
+
+    if (latestStep.status === 'completed') return `បានបញ្ចប់: ${stepLabel}`;
+    if (latestStep.status === 'in_progress') return `កំពុងធ្វើ: ${stepLabel}`;
+    return `ដល់: ${stepLabel}`;
+  };
+
+  const buildRemainingWorkTelegramMessage = (orders = []) => {
+    const activeOrders = orders.filter((order) => !isOrderCompleted(order));
+    const overdueOrders = activeOrders.filter((order) => getDeadlineMeta(order).tone === 'overdue');
+    const dueSoonOrders = activeOrders.filter((order) => ['today', 'soon'].includes(getDeadlineMeta(order).tone));
+    const totalQuantity = activeOrders.reduce((total, order) => total + (parseInt(order?.orderInfo?.quantity) || 0), 0);
+    const timeText = new Date().toLocaleString('km-KH', { hour12: false });
+    const previewOrders = activeOrders.slice(0, 20);
+
+    const lines = [
+      '📣 ការងារដែលនៅសល់',
+      '━━━━━━━━━━━━━━━━━━━━',
+      `🧾 Order នៅសល់: ${activeOrders.length}`,
+      `👕 Qty សរុប: ${totalQuantity} pcs`,
+      `🚨 ហួស deadline: ${overdueOrders.length}`,
+      `⚠️ ជិតដល់ deadline: ${dueSoonOrders.length}`,
+      `🕒 ពេលផ្ញើ: ${timeText}`,
+      '',
+      'បញ្ជីការងារ:',
+    ];
+
+    if (!previewOrders.length) {
+      lines.push('✅ មិនមានការងារនៅសល់ទេ');
+      return lines.join('\n');
+    }
+
+    previewOrders.forEach((order, index) => {
+      const deadlineMeta = getDeadlineMeta(order);
+      lines.push(
+        `${index + 1}. ${order?.orderInfo?.poNumber || '-'} | ${order?.orderInfo?.customer || '-'} | ${order?.orderInfo?.quantity || 0} pcs`,
+        `   Deadline: ${order?.orderInfo?.deadline || '-'} (${deadlineMeta.label})`,
+        `   Status: ${getReportStatusLabel(order)}`
+      );
+    });
+
+    if (activeOrders.length > previewOrders.length) {
+      lines.push('', `+${activeOrders.length - previewOrders.length} orders ផ្សេងទៀត...`);
+    }
+
+    return lines.join('\n');
+  };
+
+  const handleSendRemainingWorkAlert = async () => {
+    if (!TELEGRAM_PROXY_URL) {
+      showNotification('Telegram proxy is not configured.', 'warning');
+      return;
+    }
+
+    try {
+      await sendTelegramNotification(buildRemainingWorkTelegramMessage(savedOrders));
+      showNotification('Remaining work alert sent to Telegram group.', 'success');
+    } catch (error) {
+      console.error('Remaining work alert failed:', error);
+      showNotification('Failed to send Telegram alert.', 'error');
+    }
+  };
+
+  const escapeCsvCell = (value) => {
+    const text = String(value ?? '');
+    return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+
+  const handleExportReport = () => {
+    const headers = ['PO Number', 'Customer', 'Phone', 'Order Date', 'Deadline', 'Quantity', 'Status', 'Sizes', 'Saved At'];
+    const rows = reportOrders.map((order) => [
+      order?.orderInfo?.poNumber || '',
+      order?.orderInfo?.customer || '',
+      order?.orderInfo?.phone || '',
+      order?.orderInfo?.date || '',
+      order?.orderInfo?.deadline || '',
+      order?.orderInfo?.quantity || 0,
+      getReportStatusLabel(order),
+      getOrderSizeSummary(order),
+      order?.savedAt || '',
+    ]);
+    const csv = [headers, ...rows].map((row) => row.map(escapeCsvCell).join(',')).join('\r\n');
+    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `orders-report-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showNotification('Report exported successfully.', 'success');
+  };
+
+  const getLocalDateString = (date = new Date()) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const getDateDiffInDays = (dateString) => {
+    if (!dateString) return null;
+    const target = new Date(`${dateString}T00:00:00`);
+    if (Number.isNaN(target.getTime())) return null;
+    const today = new Date(`${getLocalDateString()}T00:00:00`);
+    return Math.round((target.getTime() - today.getTime()) / 86400000);
+  };
+
+  const isOrderCompleted = (order) => {
+    const deliveryStepIndex = STEPS.length - 1;
+    return order?.orderInfo?.status === 'completed' || order?.stepsData?.[deliveryStepIndex]?.status === 'completed';
+  };
+
+  const getDeadlineMeta = (order) => {
+    if (isOrderCompleted(order)) {
+      return {
+        tone: 'done',
+        label: 'Completed',
+        className: 'bg-green-50 text-green-700 border-green-100',
+      };
+    }
+
+    const diffDays = getDateDiffInDays(order?.orderInfo?.deadline);
+    if (diffDays === null) {
+      return {
+        tone: 'none',
+        label: 'No deadline',
+        className: 'bg-slate-50 text-slate-500 border-slate-100',
+      };
+    }
+
+    if (diffDays < 0) {
+      return {
+        tone: 'overdue',
+        label: `Overdue ${Math.abs(diffDays)}d`,
+        className: 'bg-red-50 text-red-700 border-red-200',
+      };
+    }
+
+    if (diffDays === 0) {
+      return {
+        tone: 'today',
+        label: 'Due today',
+        className: 'bg-amber-50 text-amber-700 border-amber-200',
+      };
+    }
+
+    if (diffDays <= 2) {
+      return {
+        tone: 'soon',
+        label: `${diffDays}d left`,
+        className: 'bg-yellow-50 text-yellow-700 border-yellow-200',
+      };
+    }
+
+    return {
+      tone: 'ok',
+      label: `${diffDays}d left`,
+      className: 'bg-blue-50 text-blue-700 border-blue-100',
+    };
+  };
+
+  const todayDateString = getLocalDateString();
+  const dashboardStats = useMemo(() => {
+    const activeOrders = savedOrders.filter((order) => !isOrderCompleted(order));
+    const overdueOrders = activeOrders.filter((order) => getDeadlineMeta(order).tone === 'overdue');
+    const dueSoonOrders = activeOrders.filter((order) => ['today', 'soon'].includes(getDeadlineMeta(order).tone));
+
+    return {
+      todayOrders: savedOrders.filter((order) => order?.orderInfo?.date === todayDateString),
+      activeOrders,
+      overdueOrders,
+      dueSoonOrders,
+      completedOrders: savedOrders.filter((order) => isOrderCompleted(order)),
+    };
+  }, [savedOrders, todayDateString]);
+
+  const archivedOrders = useMemo(
+    () => savedOrders.filter((order) => isOrderCompleted(order)),
+    [savedOrders]
+  );
+
+  const selectedCustomerOrders = useMemo(() => {
+    const normalizedCustomer = selectedCustomer.trim().toLowerCase();
+    if (!normalizedCustomer) return [];
+    return savedOrders.filter((order) => String(order?.orderInfo?.customer || '').trim().toLowerCase() === normalizedCustomer);
+  }, [savedOrders, selectedCustomer]);
+
+  const openCustomerHistory = (customer, event) => {
+    event?.stopPropagation?.();
+    const normalizedCustomer = String(customer || '').trim();
+    if (!normalizedCustomer) {
+      showNotification('No customer name for this order.', 'warning');
+      return;
+    }
+    setSelectedCustomer(normalizedCustomer);
+  };
 
   const pendingTasksCount = useMemo(() => {
     if (isAdmin) return 0;
@@ -1266,6 +1570,14 @@ export default function App() {
   const mobileViewTitle =
     viewMode === 'form'
       ? (orderInfo.poNumber ? `Order ${orderInfo.poNumber}` : 'បង្កើតការកុម្ម៉ង់')
+      : viewMode === 'dashboard'
+        ? 'Dashboard'
+      : viewMode === 'report'
+        ? 'Report'
+      : viewMode === 'archive'
+        ? 'Archive'
+      : viewMode === 'users'
+        ? 'User Login'
       : listFilter === 'my_tasks'
         ? 'ការងារខ្ញុំ'
         : listFilter === 'history'
@@ -1449,6 +1761,11 @@ export default function App() {
 
   const openReceiveModal = (order, stepIndex) => {
     const sData = order.stepsData || {};
+    const sourceStepIndex = Number.isFinite(sData[stepIndex]?.fromStepIndex)
+      ? sData[stepIndex].fromStepIndex
+      : Object.keys(sData)
+        .map((key) => parseInt(key, 10))
+        .find((index) => Number.isFinite(index) && sData[index]?.nextStepIndex === stepIndex);
     let defaultSizes = {
       male: { ...order.orderInfo.sizes.male },
       female: { ...order.orderInfo.sizes.female },
@@ -1457,7 +1774,10 @@ export default function App() {
     };
     let defaultQty = order.orderInfo.quantity;
 
-    if (stepIndex > 0 && sData[stepIndex - 1]?.receivedSizes) {
+    if (Number.isFinite(sourceStepIndex) && sData[sourceStepIndex]?.receivedSizes) {
+      defaultSizes = sData[sourceStepIndex].receivedSizes;
+      defaultQty = sData[sourceStepIndex].quantity;
+    } else if (stepIndex > 0 && sData[stepIndex - 1]?.receivedSizes) {
       defaultSizes = sData[stepIndex - 1].receivedSizes;
       defaultQty = sData[stepIndex - 1].quantity;
     }
@@ -1503,7 +1823,12 @@ export default function App() {
 
     try {
       await setDoc(getSharedOrderDocRef(order.orderInfo.poNumber), {
-        ...order, stepsData: updatedStepsData
+        ...order,
+        orderInfo: {
+          ...order.orderInfo,
+          status: stepIndex === STEPS.length - 1 ? 'completed' : order.orderInfo?.status,
+        },
+        stepsData: updatedStepsData
       }, { merge: true });
       void sendTelegramToRoles(
         [currentRole.id],
@@ -1524,27 +1849,32 @@ export default function App() {
     const sData = order.stepsData || {};
     const nextRoleOptions = STEPS
       .map((step, index) => ({ ...step, index }))
-      .filter((step) => step.index > stepIndex && (sData[step.index]?.status || 'pending') === 'pending');
+      .filter((step) => step.index !== stepIndex && sData[step.index]?.status !== 'completed');
 
     setConfirmDialog({
       show: true,
       title: 'Finish this step?',
-      message: 'Confirm completion and choose the next role.',
-      onConfirm: (selectedNextRoleId) => performComplete(order, stepIndex, selectedNextRoleId),
+      message: 'Confirm completion, choose the next role, and add a handoff note if needed.',
+      onConfirm: (selectedNextStepIndex, handoffNote) => performComplete(order, stepIndex, selectedNextStepIndex, handoffNote),
       isDangerous: false,
       nextRoleOptions,
-      selectedNextRole: nextRoleOptions[0]?.role || ''
+      selectedNextRole: nextRoleOptions[0]?.index?.toString() || '',
+      handoffNote: '',
+      showHandoffNote: true,
     });
   };
 
-  const performComplete = async (order, stepIndex, selectedNextRoleId = '') => {
+  const performComplete = async (order, stepIndex, selectedNextStepIndex = '', handoffNote = '') => {
     if (!user || !order) return;
     const sData = order.stepsData || {};
-    const selectedNextStepIndex = STEPS.findIndex((step) => step.role === selectedNextRoleId);
-    const fallbackNextStepIndex = STEPS.findIndex(
-      (step, index) => index > stepIndex && (sData[index]?.status || 'pending') === 'pending'
-    );
-    const effectiveNextStepIndex = selectedNextStepIndex > stepIndex ? selectedNextStepIndex : fallbackNextStepIndex;
+    const normalizedHandoffNote = handoffNote.trim();
+    const parsedNextStepIndex = parseInt(selectedNextStepIndex, 10);
+    const effectiveNextStepIndex =
+      Number.isFinite(parsedNextStepIndex) &&
+      parsedNextStepIndex !== stepIndex &&
+      sData[parsedNextStepIndex]?.status !== 'completed'
+        ? parsedNextStepIndex
+        : -1;
     const nextRoleId = effectiveNextStepIndex >= 0 ? STEPS[effectiveNextStepIndex]?.role : '';
     const completedAt = new Date().toISOString();
     const updatedStepsData = {
@@ -1555,11 +1885,16 @@ export default function App() {
         completedAt,
         nextRoleId: nextRoleId || null,
         nextStepIndex: effectiveNextStepIndex >= 0 ? effectiveNextStepIndex : null,
+        handoffNote: normalizedHandoffNote || null,
       }
     };
 
-    if (effectiveNextStepIndex >= 0 && !updatedStepsData[effectiveNextStepIndex]) {
-      updatedStepsData[effectiveNextStepIndex] = { status: 'pending' };
+    if (effectiveNextStepIndex >= 0) {
+      updatedStepsData[effectiveNextStepIndex] = {
+        ...(updatedStepsData[effectiveNextStepIndex] || {}),
+        status: updatedStepsData[effectiveNextStepIndex]?.status || 'pending',
+        fromStepIndex: stepIndex,
+      };
     }
 
     if (viewMode === 'form' && orderInfo.poNumber === order.orderInfo.poNumber) {
@@ -1579,6 +1914,7 @@ export default function App() {
           quantity: sData[stepIndex]?.quantity ?? order.orderInfo?.quantity,
           role: currentRole.id,
           stepLabel: STEPS[stepIndex]?.label,
+          note: normalizedHandoffNote,
         })
       );
       showNotification('Step completed successfully!', 'success');
@@ -1820,14 +2156,26 @@ export default function App() {
                     className="w-full p-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     {confirmDialog.nextRoleOptions.map((option) => (
-                      <option key={`${option.index}-${option.role}`} value={option.role}>{option.label}</option>
+                      <option key={`${option.index}-${option.role}`} value={option.index.toString()}>{option.label}</option>
                     ))}
                   </select>
                 </div>
               )}
+              {confirmDialog.showHandoffNote && (
+                <div className="w-full text-left mb-4">
+                  <label className="block text-xs font-bold text-gray-600 mb-1">Handoff note</label>
+                  <textarea
+                    value={confirmDialog.handoffNote}
+                    onChange={(e) => setConfirmDialog((prev) => ({ ...prev, handoffNote: e.target.value }))}
+                    className="w-full rounded-lg border border-gray-300 p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                    rows="3"
+                    placeholder="ឧ. ខ្វះ 2 pcs size L, សូមពិនិត្យ logo..."
+                  />
+                </div>
+              )}
               <div className="flex w-full flex-col gap-3 sm:flex-row">
                 <button onClick={closeConfirmDialog} className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium">ទេ (No)</button>
-                <button onClick={() => confirmDialog.onConfirm?.(confirmDialog.selectedNextRole)} className={`flex-1 px-4 py-2 text-white rounded-lg font-medium shadow-md ${confirmDialog.isDangerous ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}>បាទ/ចាស (Yes)</button>
+                <button onClick={() => confirmDialog.onConfirm?.(confirmDialog.selectedNextRole, confirmDialog.handoffNote)} className={`flex-1 px-4 py-2 text-white rounded-lg font-medium shadow-md ${confirmDialog.isDangerous ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}>បាទ/ចាស (Yes)</button>
               </div>
             </div>
           </div>
@@ -1935,6 +2283,56 @@ export default function App() {
         </div>
       )}
 
+      {selectedCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm print:hidden">
+          <div className="flex max-h-[86vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
+              <div className="min-w-0">
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-600">Customer History</p>
+                <h3 className="mt-1 truncate text-xl font-black text-slate-900">{selectedCustomer}</h3>
+                <p className="mt-1 text-sm text-slate-500">{selectedCustomerOrders.length} orders found</p>
+              </div>
+              <button type="button" onClick={() => setSelectedCustomer('')} className="rounded-full bg-slate-100 p-2 text-slate-500 transition hover:bg-slate-200" aria-label="Close customer history">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-4">
+              {selectedCustomerOrders.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm italic text-slate-400">No orders for this customer.</p>
+              ) : (
+                <div className="space-y-3">
+                  {selectedCustomerOrders.map((order) => {
+                    const deadlineMeta = getDeadlineMeta(order);
+                    return (
+                      <button
+                        key={order.id}
+                        type="button"
+                        onClick={() => { setSelectedCustomer(''); handleLoad(order); }}
+                        className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-200 hover:bg-blue-50"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate font-mono text-sm font-black text-blue-700">{order.orderInfo.poNumber || '-'}</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-700">{getReportStatusLabel(order)}</p>
+                          </div>
+                          <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-bold ${deadlineMeta.className}`}>{deadlineMeta.label}</span>
+                        </div>
+                        <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-500 md:grid-cols-4">
+                          <div><span className="font-bold text-slate-700">Date:</span> {order.orderInfo.date || '-'}</div>
+                          <div><span className="font-bold text-slate-700">Deadline:</span> {order.orderInfo.deadline || '-'}</div>
+                          <div><span className="font-bold text-slate-700">Qty:</span> {order.orderInfo.quantity || 0}</div>
+                          <div><span className="font-bold text-slate-700">Phone:</span> {order.orderInfo.phone || '-'}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="relative z-10 flex min-h-screen md:h-screen">
       {/* --- SIDEBAR --- */}
       <aside className={`${isGeneratingPDF ? 'hidden' : 'print:hidden'} hidden md:flex md:w-64 md:flex-col md:border-r md:border-slate-200 md:bg-white`}>
@@ -1943,9 +2341,13 @@ export default function App() {
           <div className="min-w-0 flex-1"><h1 className="truncate font-bold text-lg text-blue-900 leading-tight">ប្រព័ន្ធផលិត</h1><p className="text-xs text-gray-500">T-Shirt Manager</p></div>
         </div>
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+          <button onClick={() => setViewMode('dashboard')} className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${viewMode === 'dashboard' ? 'bg-blue-50 text-blue-700 font-medium shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}><div className="flex items-center gap-3"><Calculator size={20} /> <span>Dashboard</span></div>{dashboardStats.overdueOrders.length > 0 && <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{dashboardStats.overdueOrders.length}</span>}</button>
           <button onClick={() => { setViewMode('list'); setListFilter('all'); }} className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${viewMode === 'list' && listFilter === 'all' ? 'bg-blue-50 text-blue-700 font-medium shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}><div className="flex items-center gap-3"><Home size={20} /> <span>ទាំងអស់</span></div></button>
           {!isAdmin && <button onClick={() => { setViewMode('list'); setListFilter('my_tasks'); }} className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${viewMode === 'list' && listFilter === 'my_tasks' ? 'bg-blue-50 text-blue-700 font-medium shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}><div className="flex items-center gap-3"><Inbox size={20} /> <span>ការងារខ្ញុំ</span></div>{pendingTasksCount > 0 && <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{pendingTasksCount}</span>}</button>}
           <button onClick={() => { setViewMode('list'); setListFilter('history'); }} className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${viewMode === 'list' && listFilter === 'history' ? 'bg-blue-50 text-blue-700 font-medium shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}><div className="flex items-center gap-3"><History size={20} /> <span>ប្រវត្តិ {isAdmin && "(ចប់រួចរាល់)"}</span></div></button>
+          <button onClick={() => setViewMode('report')} className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${viewMode === 'report' ? 'bg-blue-50 text-blue-700 font-medium shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}><div className="flex items-center gap-3"><FileText size={20} /> <span>Report</span></div></button>
+          <button onClick={() => setViewMode('archive')} className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${viewMode === 'archive' ? 'bg-blue-50 text-blue-700 font-medium shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}><div className="flex items-center gap-3"><Archive size={20} /> <span>Archive</span></div>{archivedOrders.length > 0 && <span className="bg-slate-200 text-slate-700 text-xs font-bold px-2 py-0.5 rounded-full">{archivedOrders.length}</span>}</button>
+          {isAdmin && <button onClick={() => setViewMode('users')} className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${viewMode === 'users' ? 'bg-blue-50 text-blue-700 font-medium shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}><div className="flex items-center gap-3"><Settings size={20} /> <span>User Login</span></div></button>}
           {isAdmin && <button onClick={handleNewOrder} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${viewMode === 'form' && !orderInfo.id ? 'bg-blue-50 text-blue-700 font-medium shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}><PlusCircle size={20} /><span>បង្កើតថ្មី</span></button>}
         </nav>
         <div className="border-t border-gray-100 bg-gray-50 p-4">
@@ -1983,6 +2385,12 @@ export default function App() {
 
           <div className={`mt-4 grid gap-2 ${isAdmin ? 'grid-cols-2' : 'grid-cols-3'}`}>
             <button
+              onClick={() => { setViewMode('dashboard'); setMobileNavOpen(false); }}
+              className={`rounded-2xl px-4 py-3 text-left text-sm font-bold transition ${viewMode === 'dashboard' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-50 text-slate-700'}`}
+            >
+              Dashboard
+            </button>
+            <button
               onClick={() => { setViewMode('list'); setListFilter('all'); setMobileNavOpen(false); }}
               className={`rounded-2xl px-4 py-3 text-left text-sm font-bold transition ${viewMode === 'list' && listFilter === 'all' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-50 text-slate-700'}`}
             >
@@ -2002,6 +2410,26 @@ export default function App() {
             >
               History
             </button>
+            <button
+              onClick={() => { setViewMode('report'); setMobileNavOpen(false); }}
+              className={`rounded-2xl px-4 py-3 text-left text-sm font-bold transition ${viewMode === 'report' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-50 text-slate-700'}`}
+            >
+              Report
+            </button>
+            <button
+              onClick={() => { setViewMode('archive'); setMobileNavOpen(false); }}
+              className={`rounded-2xl px-4 py-3 text-left text-sm font-bold transition ${viewMode === 'archive' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-50 text-slate-700'}`}
+            >
+              Archive
+            </button>
+            {isAdmin && (
+              <button
+                onClick={() => { setViewMode('users'); setMobileNavOpen(false); }}
+                className={`rounded-2xl px-4 py-3 text-left text-sm font-bold transition ${viewMode === 'users' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-50 text-slate-700'}`}
+              >
+                User Login
+              </button>
+            )}
             {isAdmin && (
               <button
                 onClick={() => { handleNewOrder(); setMobileNavOpen(false); }}
@@ -2048,6 +2476,116 @@ export default function App() {
 
       {/* --- MAIN CONTENT --- */}
       <main className={`flex-1 overflow-y-auto overflow-x-hidden ${isGeneratingPDF ? 'bg-white p-0' : 'bg-transparent px-4 pb-[calc(8rem+env(safe-area-inset-bottom))] pt-4 sm:px-5 md:bg-slate-50 md:p-6 md:pb-6 print:bg-white print:p-0'}`}>
+        {viewMode === 'dashboard' && (
+          <div className="mx-auto max-w-6xl space-y-5 print:hidden">
+            <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-800 md:text-2xl">Dashboard</h2>
+                <p className="mt-1 text-sm text-gray-500">មើលស្ថានភាព order និង deadline alert សំខាន់ៗ</p>
+              </div>
+              <div className="flex flex-col gap-2 md:items-end">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Today: {todayDateString}</p>
+                <button
+                  type="button"
+                  onClick={handleSendRemainingWorkAlert}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700"
+                >
+                  <Send size={16} />
+                  Send Telegram Alert
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <p className="text-xs font-bold uppercase text-slate-400">Today</p>
+                <p className="mt-2 text-3xl font-black text-slate-900">{dashboardStats.todayOrders.length}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <p className="text-xs font-bold uppercase text-slate-400">Active</p>
+                <p className="mt-2 text-3xl font-black text-blue-700">{dashboardStats.activeOrders.length}</p>
+              </div>
+              <div className="rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm">
+                <p className="text-xs font-bold uppercase text-red-500">Overdue</p>
+                <p className="mt-2 text-3xl font-black text-red-700">{dashboardStats.overdueOrders.length}</p>
+              </div>
+              <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4 shadow-sm">
+                <p className="text-xs font-bold uppercase text-yellow-600">Due Soon</p>
+                <p className="mt-2 text-3xl font-black text-yellow-700">{dashboardStats.dueSoonOrders.length}</p>
+              </div>
+              <div className="rounded-xl border border-green-200 bg-green-50 p-4 shadow-sm">
+                <p className="text-xs font-bold uppercase text-green-600">Completed</p>
+                <p className="mt-2 text-3xl font-black text-green-700">{dashboardStats.completedOrders.length}</p>
+              </div>
+            </div>
+
+            {(dashboardStats.overdueOrders.length > 0 || dashboardStats.dueSoonOrders.length > 0) && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle size={18} />
+                  មាន {dashboardStats.overdueOrders.length} order ហួស deadline និង {dashboardStats.dueSoonOrders.length} order ជិតដល់ deadline។
+                </div>
+              </div>
+            )}
+
+            <div className="grid gap-5 lg:grid-cols-2">
+              <section className="rounded-xl border border-red-100 bg-white shadow-sm">
+                <div className="flex items-center justify-between border-b border-red-100 px-4 py-3">
+                  <h3 className="font-bold text-red-700">Overdue Orders</h3>
+                  <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-black text-red-700">{dashboardStats.overdueOrders.length}</span>
+                </div>
+                <div className="divide-y divide-slate-100">
+                  {dashboardStats.overdueOrders.length === 0 ? (
+                    <p className="p-4 text-sm italic text-slate-400">មិនមាន order ហួស deadline</p>
+                  ) : dashboardStats.overdueOrders.slice(0, 8).map((order) => {
+                    const deadlineMeta = getDeadlineMeta(order);
+                    return (
+                      <button key={order.id} type="button" onClick={() => handleLoad(order)} className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:bg-red-50">
+                        <div className="min-w-0">
+                          <p className="truncate font-mono text-sm font-black text-blue-700">{order.orderInfo.poNumber}</p>
+                          <p className="mt-1 truncate text-sm font-semibold text-slate-900">{order.orderInfo.customer || '-'}</p>
+                          <p className="mt-1 text-xs text-slate-500">{getReportStatusLabel(order)}</p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="text-sm font-bold text-slate-900">{order.orderInfo.deadline || '-'}</p>
+                          <span className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-xs font-bold ${deadlineMeta.className}`}>{deadlineMeta.label}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section className="rounded-xl border border-yellow-100 bg-white shadow-sm">
+                <div className="flex items-center justify-between border-b border-yellow-100 px-4 py-3">
+                  <h3 className="font-bold text-yellow-700">Due Soon</h3>
+                  <span className="rounded-full bg-yellow-50 px-2.5 py-1 text-xs font-black text-yellow-700">{dashboardStats.dueSoonOrders.length}</span>
+                </div>
+                <div className="divide-y divide-slate-100">
+                  {dashboardStats.dueSoonOrders.length === 0 ? (
+                    <p className="p-4 text-sm italic text-slate-400">មិនមាន order ជិត deadline</p>
+                  ) : dashboardStats.dueSoonOrders.slice(0, 8).map((order) => {
+                    const deadlineMeta = getDeadlineMeta(order);
+                    return (
+                      <button key={order.id} type="button" onClick={() => handleLoad(order)} className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:bg-yellow-50">
+                        <div className="min-w-0">
+                          <p className="truncate font-mono text-sm font-black text-blue-700">{order.orderInfo.poNumber}</p>
+                          <p className="mt-1 truncate text-sm font-semibold text-slate-900">{order.orderInfo.customer || '-'}</p>
+                          <p className="mt-1 text-xs text-slate-500">{getReportStatusLabel(order)}</p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="text-sm font-bold text-slate-900">{order.orderInfo.deadline || '-'}</p>
+                          <span className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-xs font-bold ${deadlineMeta.className}`}>{deadlineMeta.label}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            </div>
+          </div>
+        )}
+
         {/* LIST VIEW */}
         {viewMode === 'list' && (
           <div className="max-w-6xl mx-auto space-y-6 print:hidden">
@@ -2056,10 +2594,31 @@ export default function App() {
                 <h2 className="text-xl font-bold text-gray-800 md:text-2xl">{listTitle}</h2>
                 <p className="mt-1 text-sm text-gray-500">{listDescription}</p>
               </div>
-              <div className="hidden relative w-full md:block md:w-72">
+              <div className="hidden w-full items-center gap-2 md:flex md:w-auto">
+                <div className="relative w-72">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
                 <input ref={desktopSearchInputRef} type="text" placeholder="ស្វែងរក / Scan QR..." className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-10 text-sm font-medium text-slate-700 outline-none shadow-sm transition focus:border-blue-300 focus:ring-4 focus:ring-blue-100" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                 <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 cursor-pointer hover:text-blue-500 transition" onClick={() => setShowScanner(true)}><ScanLine size={16} /></div>
+                </div>
+                <div className="relative">
+                  <input
+                    type="date"
+                    value={dateFilter}
+                    onChange={(e) => setDateFilter(e.target.value)}
+                    className="h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm font-bold text-slate-600 outline-none shadow-sm transition focus:border-blue-300 focus:ring-4 focus:ring-blue-100"
+                    aria-label="Filter by deadline"
+                  />
+                  {dateFilter && (
+                    <button
+                      type="button"
+                      onClick={() => setDateFilter('')}
+                      className="absolute -right-2 -top-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-700 text-white shadow-sm transition hover:bg-slate-900"
+                      aria-label="Clear deadline filter"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -2114,6 +2673,25 @@ export default function App() {
                     <ScanLine size={18} />
                   </button>
                 </div>
+                <div className="relative mt-2.5">
+                  <input
+                    type="date"
+                    value={dateFilter}
+                    onChange={(e) => setDateFilter(e.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 px-3 text-sm font-bold text-slate-600 outline-none shadow-inner shadow-slate-100/80 transition focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                    aria-label="Filter by deadline"
+                  />
+                  {dateFilter && (
+                    <button
+                      type="button"
+                      onClick={() => setDateFilter('')}
+                      className="absolute right-3 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-slate-700 text-white shadow-sm transition hover:bg-slate-900"
+                      aria-label="Clear deadline filter"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
                 <p className="mt-2.5 px-1 text-[11px] font-medium text-slate-400">Quick search, scan, and open orders with one tap.</p>
               </section>
               {filteredOrders.length === 0 ? (
@@ -2122,6 +2700,7 @@ export default function App() {
                 </div>
               ) : filteredOrders.map((order) => {
                 const statusMeta = getOrderStatusMeta(order);
+                const deadlineMeta = getDeadlineMeta(order);
                 const { action } = getOrderListUiMeta(order);
                 return (
                   <div key={order.id} className="overflow-hidden rounded-[24px] border border-white/75 bg-white/95 shadow-[0_18px_38px_-30px_rgba(15,23,42,0.45)]">
@@ -2148,7 +2727,9 @@ export default function App() {
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0 flex-1">
                             <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">Customer</p>
-                            <p className="mt-1 truncate text-sm font-semibold text-slate-900">{order.orderInfo.customer || '-'}</p>
+                            <button type="button" onClick={(event) => openCustomerHistory(order.orderInfo.customer, event)} className="mt-1 max-w-full truncate text-left text-sm font-semibold text-slate-900 underline decoration-slate-300 underline-offset-4 hover:text-blue-700">
+                              {order.orderInfo.customer || '-'}
+                            </button>
                           </div>
                           <div className="rounded-2xl bg-white px-3 py-2 text-right shadow-sm">
                             <p className="text-[10px] uppercase tracking-[0.16em] text-slate-400">Qty</p>
@@ -2157,7 +2738,10 @@ export default function App() {
                         </div>
                         <div className="mt-2 flex items-center justify-between gap-3 rounded-2xl bg-white px-3 py-2.5 shadow-sm">
                           <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">Deadline</p>
-                          <p className="text-sm font-semibold text-slate-900">{order.orderInfo.deadline || '-'}</p>
+                          <div className="text-right">
+                            <p className="text-sm font-semibold text-slate-900">{order.orderInfo.deadline || '-'}</p>
+                            <span className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${deadlineMeta.className}`}>{deadlineMeta.label}</span>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -2203,6 +2787,7 @@ export default function App() {
                     {filteredOrders.length === 0 ? <tr><td colSpan="6" className="p-8 text-center text-gray-400 italic">គ្មានទិន្នន័យ</td></tr> : filteredOrders.map(order => {
                       let displayStatus = null;
                       let actionButton = null;
+                      const deadlineMeta = getDeadlineMeta(order);
                       const sData = order.stepsData || {};
                       const orderStatus = order.orderInfo.status || 'pending_operation';
                       const startStep = order.orderInfo.startStep || 0;
@@ -2242,9 +2827,16 @@ export default function App() {
                       return (
                         <tr key={order.id} className="hover:bg-blue-50 transition cursor-pointer group" onClick={() => handleLoad(order)}>
                           <td className="p-4 font-mono font-bold text-blue-600">{order.orderInfo.poNumber}</td>
-                          <td className="p-4 font-medium text-gray-900">{order.orderInfo.customer}</td>
+                          <td className="p-4 font-medium text-gray-900">
+                            <button type="button" onClick={(event) => openCustomerHistory(order.orderInfo.customer, event)} className="text-left font-medium underline decoration-slate-300 underline-offset-4 hover:text-blue-700">
+                              {order.orderInfo.customer}
+                            </button>
+                          </td>
                           <td className="p-4"><span className="bg-gray-100 text-gray-600 px-2 py-1 rounded font-bold">{order.orderInfo.quantity}</span></td>
-                          <td className="p-4 text-gray-500">{order.orderInfo.deadline}</td>
+                          <td className="p-4">
+                            <div className="font-medium text-gray-700">{order.orderInfo.deadline || '-'}</div>
+                            <span className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${deadlineMeta.className}`}>{deadlineMeta.label}</span>
+                          </td>
                           <td className="p-4">{displayStatus}</td>
                           <td className="p-4 text-right">
                             {actionButton ? (
@@ -2265,6 +2857,242 @@ export default function App() {
         )}
 
         {/* FORM VIEW */}
+        {viewMode === 'report' && (
+          <div className="mx-auto max-w-6xl space-y-5 print:hidden">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-800 md:text-2xl">Report</h2>
+                <p className="mt-1 text-sm text-gray-500">ទិន្នន័យភ្ញៀវ និង order ទាំងអស់</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleExportReport}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
+              >
+                <FileDown size={18} />
+                Export CSV
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <p className="text-xs font-bold uppercase text-slate-400">Orders</p>
+                <p className="mt-2 text-2xl font-black text-slate-900">{reportOrders.length}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <p className="text-xs font-bold uppercase text-slate-400">Customers</p>
+                <p className="mt-2 text-2xl font-black text-slate-900">{new Set(reportOrders.map((order) => order?.orderInfo?.customer).filter(Boolean)).size}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <p className="text-xs font-bold uppercase text-slate-400">Quantity</p>
+                <p className="mt-2 text-2xl font-black text-slate-900">{reportOrders.reduce((total, order) => total + (parseInt(order?.orderInfo?.quantity) || 0), 0)}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <p className="text-xs font-bold uppercase text-slate-400">Production</p>
+                <p className="mt-2 text-2xl font-black text-slate-900">{reportOrders.filter((order) => order?.orderInfo?.status === 'production').length}</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 md:hidden">
+              {reportOrders.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-10 text-center text-sm italic text-gray-400">គ្មានទិន្នន័យ</div>
+              ) : reportOrders.map((order) => (
+                <div key={order.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-mono text-sm font-black text-blue-600">{order?.orderInfo?.poNumber || '-'}</p>
+                      <button type="button" onClick={(event) => openCustomerHistory(order?.orderInfo?.customer, event)} className="mt-1 max-w-full truncate text-left text-base font-bold text-slate-900 underline decoration-slate-300 underline-offset-4 hover:text-blue-700">{order?.orderInfo?.customer || '-'}</button>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{order?.orderInfo?.quantity || 0}</span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-500">
+                    <div><span className="font-bold text-slate-700">Phone:</span> {order?.orderInfo?.phone || '-'}</div>
+                    <div><span className="font-bold text-slate-700">Deadline:</span> {order?.orderInfo?.deadline || '-'}</div>
+                    <div><span className="font-bold text-slate-700">Date:</span> {order?.orderInfo?.date || '-'}</div>
+                    <div><span className="font-bold text-slate-700">Status:</span> {getReportStatusLabel(order)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm md:block">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead className="border-b border-gray-200 bg-gray-50 text-xs font-semibold uppercase text-gray-500">
+                    <tr>
+                      <th className="p-4">PO Number</th>
+                      <th className="p-4">Customer</th>
+                      <th className="p-4">Phone</th>
+                      <th className="p-4">Order Date</th>
+                      <th className="p-4">Deadline</th>
+                      <th className="p-4">Qty</th>
+                      <th className="p-4">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 text-sm">
+                    {reportOrders.length === 0 ? (
+                      <tr><td colSpan="7" className="p-8 text-center italic text-gray-400">គ្មានទិន្នន័យ</td></tr>
+                    ) : reportOrders.map((order) => (
+                      <tr key={order.id} className="transition hover:bg-blue-50">
+                        <td className="p-4 font-mono font-bold text-blue-600">{order?.orderInfo?.poNumber || '-'}</td>
+                        <td className="p-4 font-medium text-gray-900">
+                          <button type="button" onClick={(event) => openCustomerHistory(order?.orderInfo?.customer, event)} className="text-left font-medium underline decoration-slate-300 underline-offset-4 hover:text-blue-700">
+                            {order?.orderInfo?.customer || '-'}
+                          </button>
+                        </td>
+                        <td className="p-4 text-gray-500">{order?.orderInfo?.phone || '-'}</td>
+                        <td className="p-4 text-gray-500">{order?.orderInfo?.date || '-'}</td>
+                        <td className="p-4 font-medium text-gray-700">{order?.orderInfo?.deadline || '-'}</td>
+                        <td className="p-4"><span className="rounded bg-gray-100 px-2 py-1 font-bold text-gray-600">{order?.orderInfo?.quantity || 0}</span></td>
+                        <td className="p-4 text-gray-500">{getReportStatusLabel(order)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {viewMode === 'archive' && (
+          <div className="mx-auto max-w-6xl space-y-5 print:hidden">
+            <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-800 md:text-2xl">Completed Archive</h2>
+                <p className="mt-1 text-sm text-gray-500">Order ដែលបានបញ្ចប់ ត្រូវបានរក្សាទុកទីនេះ ដើម្បីឱ្យ list ស្អាត។</p>
+              </div>
+              <span className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-bold text-slate-700">{archivedOrders.length} archived</span>
+            </div>
+
+            <div className="space-y-3 md:hidden">
+              {archivedOrders.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-10 text-center text-sm italic text-gray-400">មិនទាន់មាន completed orders</div>
+              ) : archivedOrders.map((order) => (
+                <div key={order.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-mono text-sm font-black text-blue-600">{order.orderInfo.poNumber || '-'}</p>
+                      <button type="button" onClick={(event) => openCustomerHistory(order.orderInfo.customer, event)} className="mt-1 max-w-full truncate text-left text-base font-bold text-slate-900 underline decoration-slate-300 underline-offset-4 hover:text-blue-700">{order.orderInfo.customer || '-'}</button>
+                    </div>
+                    <span className="rounded-full bg-green-50 px-2.5 py-1 text-xs font-bold text-green-700">Completed</span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-500">
+                    <div><span className="font-bold text-slate-700">Date:</span> {order.orderInfo.date || '-'}</div>
+                    <div><span className="font-bold text-slate-700">Deadline:</span> {order.orderInfo.deadline || '-'}</div>
+                    <div><span className="font-bold text-slate-700">Qty:</span> {order.orderInfo.quantity || 0}</div>
+                    <div><span className="font-bold text-slate-700">Status:</span> {getReportStatusLabel(order)}</div>
+                  </div>
+                  <button type="button" onClick={() => handleLoad(order)} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100">
+                    <Eye size={16} />
+                    Open
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm md:block">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead className="border-b border-gray-200 bg-gray-50 text-xs font-semibold uppercase text-gray-500">
+                    <tr>
+                      <th className="p-4">PO Number</th>
+                      <th className="p-4">Customer</th>
+                      <th className="p-4">Order Date</th>
+                      <th className="p-4">Deadline</th>
+                      <th className="p-4">Qty</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 text-sm">
+                    {archivedOrders.length === 0 ? (
+                      <tr><td colSpan="7" className="p-8 text-center italic text-gray-400">មិនទាន់មាន completed orders</td></tr>
+                    ) : archivedOrders.map((order) => (
+                      <tr key={order.id} className="transition hover:bg-green-50">
+                        <td className="p-4 font-mono font-bold text-blue-600">{order.orderInfo.poNumber || '-'}</td>
+                        <td className="p-4 font-medium text-gray-900">
+                          <button type="button" onClick={(event) => openCustomerHistory(order.orderInfo.customer, event)} className="text-left font-medium underline decoration-slate-300 underline-offset-4 hover:text-blue-700">
+                            {order.orderInfo.customer || '-'}
+                          </button>
+                        </td>
+                        <td className="p-4 text-gray-500">{order.orderInfo.date || '-'}</td>
+                        <td className="p-4 text-gray-500">{order.orderInfo.deadline || '-'}</td>
+                        <td className="p-4"><span className="rounded bg-gray-100 px-2 py-1 font-bold text-gray-600">{order.orderInfo.quantity || 0}</span></td>
+                        <td className="p-4 text-gray-500">{getReportStatusLabel(order)}</td>
+                        <td className="p-4 text-right">
+                          <button type="button" onClick={() => handleLoad(order)} className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-200">
+                            <Eye size={14} />
+                            Open
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {viewMode === 'users' && isAdmin && (
+          <div className="mx-auto max-w-5xl space-y-5 print:hidden">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-800 md:text-2xl">User Login</h2>
+                <p className="mt-1 text-sm text-gray-500">Admin អាចប្តូរ password និងបិទ/បើក login សម្រាប់ role នីមួយៗ។</p>
+              </div>
+              <button
+                type="button"
+                onClick={resetRoleLogins}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-bold text-amber-700 transition hover:bg-amber-100"
+              >
+                <RefreshCw size={16} />
+                Reset Default
+              </button>
+            </div>
+
+            <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800">
+              Admin login មិនអាចបិទបានទេ។ Passwords ត្រូវបានរក្សាទុកក្នុង browser local storage របស់ device នេះ។
+            </div>
+
+            <div className="grid gap-3">
+              {Object.values(ROLES).map((role) => {
+                const isRoleAdmin = role.id === 'admin';
+                const enabled = roleEnabled[role.id] !== false || isRoleAdmin;
+                return (
+                  <div key={role.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-black text-slate-900">{role.label}</p>
+                        <p className="mt-1 text-xs font-medium text-slate-400">{role.id}</p>
+                      </div>
+                      <div className="flex flex-col gap-2 md:w-[24rem] md:flex-row md:items-center">
+                        <input
+                          type="text"
+                          value={rolePasswords[role.id] ?? ''}
+                          onChange={(e) => updateRolePassword(role.id, e.target.value)}
+                          className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                          placeholder="Password"
+                        />
+                        <label className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-bold ${enabled ? 'border-green-200 bg-green-50 text-green-700' : 'border-slate-200 bg-slate-50 text-slate-400'} ${isRoleAdmin ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
+                          <input
+                            type="checkbox"
+                            checked={enabled}
+                            disabled={isRoleAdmin}
+                            onChange={(e) => updateRoleEnabled(role.id, e.target.checked)}
+                            className="h-4 w-4"
+                          />
+                          {enabled ? 'Enabled' : 'Disabled'}
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {viewMode === 'form' && (
           <div className="max-w-7xl mx-auto animate-in fade-in duration-300">
             {!isGeneratingPDF && (
@@ -2338,6 +3166,12 @@ export default function App() {
                       <h2 className="font-semibold text-gray-700 mb-4 flex items-center gap-2 pb-2 border-b"><User size={18} /> ព័ត៌មានអតិថិជន</h2>
                       <div className="space-y-3">
                         <input disabled={!isAdmin} type="text" value={orderInfo.customer} onChange={(e) => setOrderInfo({ ...orderInfo, customer: e.target.value })} className={`w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${!isAdmin ? 'bg-gray-100 text-gray-500 border-gray-200' : 'border-gray-300'}`} placeholder="ឈ្មោះ..." />
+                        {orderInfo.customer && (
+                          <button type="button" onClick={(event) => openCustomerHistory(orderInfo.customer, event)} className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm font-bold text-blue-700 transition hover:bg-blue-100">
+                            <History size={16} />
+                            Customer History
+                          </button>
+                        )}
                         <input disabled={!isAdmin} type="text" value={orderInfo.phone} onChange={(e) => setOrderInfo({ ...orderInfo, phone: e.target.value })} className={`w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${!isAdmin ? 'bg-gray-100 text-gray-500 border-gray-200' : 'border-gray-300'}`} placeholder="លេខទូរស័ព្ទ..." />
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                           <input disabled={!isAdmin} type="date" value={orderInfo.date} onChange={(e) => setOrderInfo({ ...orderInfo, date: e.target.value })} className={`w-full p-2.5 border rounded-lg outline-none ${!isAdmin ? 'bg-gray-100 text-gray-500 border-gray-200' : 'border-gray-300'}`} />
@@ -2503,7 +3337,7 @@ export default function App() {
                                     )}
                                     {status === 'completed' && <span className="text-xs font-bold text-green-700 flex items-center gap-1"><CheckCircle size={12} /> រួចរាល់ ({stepInfo.quantity} pcs)</span>}
                                   </div>
-                                  {(stepInfo.receivedAt || stepInfo.completedAt) && (<div className="text-[10px] text-gray-500 mt-1 pl-1 border-l-2 border-gray-200">{stepInfo.receivedAt && <div>• ទទួល: {formatDate(stepInfo.receivedAt)} {stepInfo.receivedBy ? `ដោយ ${stepInfo.receivedBy}` : ''}</div>}{stepInfo.completedAt && <div>• បញ្ចប់: {formatDate(stepInfo.completedAt)}</div>}</div>)}
+                                  {(stepInfo.receivedAt || stepInfo.completedAt || stepInfo.handoffNote) && (<div className="text-[10px] text-gray-500 mt-1 pl-1 border-l-2 border-gray-200">{stepInfo.receivedAt && <div>• ទទួល: {formatDate(stepInfo.receivedAt)} {stepInfo.receivedBy ? `ដោយ ${stepInfo.receivedBy}` : ''}</div>}{stepInfo.completedAt && <div>• បញ្ចប់: {formatDate(stepInfo.completedAt)}</div>}{stepInfo.handoffNote && <div>• Note: {stepInfo.handoffNote}</div>}</div>)}
                                 </div>
                               </div>
                             </div>
