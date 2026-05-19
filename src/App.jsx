@@ -35,7 +35,6 @@ try {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-
 // បំប្លែង App ID ឱ្យមានសុវត្ថិភាព (លុបសញ្ញា / ចេញដើម្បីការពារ Error Collection Path)
 const inferredAppId = firebaseConfig?.appId || firebaseConfig?.projectId || 'default-app-id';
 const rawAppId = typeof __app_id !== 'undefined' && __app_id ? String(__app_id) : inferredAppId;
@@ -52,15 +51,16 @@ const ROLES = {
   STOCK: { id: 'stock', label: '1. ស្តុក (Stock)', permissions: [0] },
   NECK_ARMS: { id: 'neck_arms', label: '2. កនិងចុងដៃ (Neck & Arms)', permissions: [1] },
   CUTTING: { id: 'cutting', label: '3. តុកាត់ (Cutting)', permissions: [2] },
-  EMBROIDERY_BACK: { id: 'embroidery_back', label: '4. ប៉ាក់ក្រោយ (Embroidery Back)', permissions: [3] },
-  PRINTING_BACK: { id: 'printing_back', label: '5. បោះពុម្ភក្រោយ (Printing Back)', permissions: [4] },
-  SEWING: { id: 'sewing', label: '6. ដេរ (Sewing)', permissions: [5] },
-  QC: { id: 'qc', label: '7. ត្រួតពិនិត្យ (QC)', permissions: [6] },
-  BUTTON: { id: 'button', label: '8. វៃនិងស្រេសឡេវ (Button)', permissions: [7] },
-  PRINTING_FRONT: { id: 'printing_front', label: '9. បោះពុម្ភមុខ (Printing Front)', permissions: [8] },
-  EMBROIDERY_FRONT: { id: 'embroidery_front', label: '10. ប៉ាក់មុខ (Embroidery Front)', permissions: [9] },
-  IRONING_PACK: { id: 'ironing_pack', label: '11. អ៊ុតបត់ច្រក (Ironing & Pack)', permissions: [10] },
-  DELIVERY: { id: 'delivery', label: '12. ដឹកជញ្ជូន (Delivery)', permissions: [11] },
+  SUBLIMATION: { id: 'sublimation', label: '4. Sublimation', permissions: [3] },
+  EMBROIDERY_BACK: { id: 'embroidery_back', label: '5. ប៉ាក់ក្រោយ (Embroidery Back)', permissions: [4] },
+  PRINTING_BACK: { id: 'printing_back', label: '6. បោះពុម្ភក្រោយ (Printing Back)', permissions: [5] },
+  SEWING: { id: 'sewing', label: '7. ដេរ (Sewing)', permissions: [6] },
+  QC: { id: 'qc', label: '8. ត្រួតពិនិត្យ (QC)', permissions: [7] },
+  BUTTON: { id: 'button', label: '9. វៃនិងស្រេសឡេវ (Button)', permissions: [8] },
+  PRINTING_FRONT: { id: 'printing_front', label: '10. បោះពុម្ភមុខ (Printing Front)', permissions: [9] },
+  EMBROIDERY_FRONT: { id: 'embroidery_front', label: '11. ប៉ាក់មុខ (Embroidery Front)', permissions: [10] },
+  IRONING_PACK: { id: 'ironing_pack', label: '12. អ៊ុតបត់ច្រក (Ironing & Pack)', permissions: [11] },
+  DELIVERY: { id: 'delivery', label: '13. ដឹកជញ្ជូន (Delivery)', permissions: [12] },
 };
 
 // ជំហាននៃការផលិត (Production Steps)
@@ -73,6 +73,7 @@ const DEFAULT_ROLE_PASSWORDS = {
   stock: '123',
   neck_arms: '123',
   cutting: '123',
+  sublimation: '123',
   embroidery_back: '123',
   printing_back: '123',
   sewing: '123',
@@ -165,15 +166,16 @@ const STEPS = [
   { id: 1, label: '1. ស្តុក (Stock)', icon: Box, role: 'stock' },
   { id: 2, label: '2. កនិងចុងដៃ (Neck & Arms)', icon: Shirt, role: 'neck_arms' },
   { id: 3, label: '3. តុកាត់ (Cutting)', icon: Scissors, role: 'cutting' },
-  { id: 4, label: '4. ប៉ាក់ក្រោយ (Embroidery Back)', icon: Palette, role: 'embroidery_back' },
-  { id: 5, label: '5. បោះពុម្ភក្រោយ (Printing Back)', icon: Printer, role: 'printing_back' },
-  { id: 6, label: '6. ដេរ (Sewing)', icon: Shirt, role: 'sewing' },
-  { id: 7, label: '7. ត្រួតពិនិត្យ (QC)', icon: CheckCircle, role: 'qc' },
-  { id: 8, label: '8. វៃនិងស្រេសឡេវ (Button)', icon: Circle, role: 'button' },
-  { id: 9, label: '9. បោះពុម្ភមុខ (Printing Front)', icon: Printer, role: 'printing_front' },
-  { id: 10, label: '10. ប៉ាក់មុខ (Embroidery Front)', icon: Palette, role: 'embroidery_front' },
-  { id: 11, label: '11. អ៊ុតបត់ច្រក (Ironing & Pack)', icon: Package, role: 'ironing_pack' },
-  { id: 12, label: '12. ដឹកជញ្ជូន (Delivery)', icon: Truck, role: 'delivery' },
+  { id: 4, label: '4. Sublimation', icon: Printer, role: 'sublimation' },
+  { id: 5, label: '5. ប៉ាក់ក្រោយ (Embroidery Back)', icon: Palette, role: 'embroidery_back' },
+  { id: 6, label: '6. បោះពុម្ភក្រោយ (Printing Back)', icon: Printer, role: 'printing_back' },
+  { id: 7, label: '7. ដេរ (Sewing)', icon: Shirt, role: 'sewing' },
+  { id: 8, label: '8. ត្រួតពិនិត្យ (QC)', icon: CheckCircle, role: 'qc' },
+  { id: 9, label: '9. វៃនិងស្រេសឡេវ (Button)', icon: Circle, role: 'button' },
+  { id: 10, label: '10. បោះពុម្ភមុខ (Printing Front)', icon: Printer, role: 'printing_front' },
+  { id: 11, label: '11. ប៉ាក់មុខ (Embroidery Front)', icon: Palette, role: 'embroidery_front' },
+  { id: 12, label: '12. អ៊ុតបត់ច្រក (Ironing & Pack)', icon: Package, role: 'ironing_pack' },
+  { id: 13, label: '13. ដឹកជញ្ជូន (Delivery)', icon: Truck, role: 'delivery' },
 ];
 
 // ពណ៌អាវ (Shirt Colors)
@@ -652,8 +654,8 @@ export default function App() {
     status: 'pending_operation',
     startStep: 0,
     sizes: {
-      male: { 'S': 0, 'M': 0, 'L': 0, 'XL': 0, 'XXL': 0, 'XXXL': 0 },
-      female: { 'S': 0, 'M': 0, 'L': 0, 'XL': 0, 'XXL': 0, 'XXXL': 0 },
+      male: { 'XS': 0, 'S': 0, 'M': 0, 'L': 0, 'XL': 0, 'XXL': 0, 'XXXL': 0 },
+      female: { 'XS': 0, 'S': 0, 'M': 0, 'L': 0, 'XL': 0, 'XXL': 0, 'XXXL': 0 },
       kids_male: { '2': 0, '4': 0, '6': 0, '8': 0, '10': 0, '12': 0 },
       kids_female: { '2': 0, '4': 0, '6': 0, '8': 0, '10': 0, '12': 0 }
     }
@@ -1998,8 +2000,8 @@ export default function App() {
     let loadedOrderInfo = { ...order.orderInfo };
     if (!loadedOrderInfo.sizes.male) {
       loadedOrderInfo.sizes = {
-        male: { 'S': 0, 'M': 0, 'L': 0, 'XL': 0, 'XXL': 0, 'XXXL': 0 },
-        female: { 'S': 0, 'M': 0, 'L': 0, 'XL': 0, 'XXL': 0, 'XXXL': 0 },
+        male: { 'XS': 0, 'S': 0, 'M': 0, 'L': 0, 'XL': 0, 'XXL': 0, 'XXXL': 0 },
+        female: { 'XS': 0, 'S': 0, 'M': 0, 'L': 0, 'XL': 0, 'XXL': 0, 'XXXL': 0 },
         kids_male: { '2': 0, '4': 0, '6': 0, '8': 0, '10': 0, '12': 0 },
         kids_female: { '2': 0, '4': 0, '6': 0, '8': 0, '10': 0, '12': 0 }
       };
@@ -2045,8 +2047,8 @@ export default function App() {
       deadline: '', poNumber: getNextPONumber(savedOrders), quantity: 0,
       status: 'pending_operation', startStep: 0,
       sizes: {
-        male: { 'S': 0, 'M': 0, 'L': 0, 'XL': 0, 'XXL': 0, 'XXXL': 0 },
-        female: { 'S': 0, 'M': 0, 'L': 0, 'XL': 0, 'XXL': 0, 'XXXL': 0 },
+        male: { 'XS': 0, 'S': 0, 'M': 0, 'L': 0, 'XL': 0, 'XXL': 0, 'XXXL': 0 },
+        female: { 'XS': 0, 'S': 0, 'M': 0, 'L': 0, 'XL': 0, 'XXL': 0, 'XXXL': 0 },
         kids_male: { '2': 0, '4': 0, '6': 0, '8': 0, '10': 0, '12': 0 },
         kids_female: { '2': 0, '4': 0, '6': 0, '8': 0, '10': 0, '12': 0 }
       }
@@ -2232,7 +2234,7 @@ export default function App() {
                   <h4 className="text-xs font-bold text-gray-500 uppercase mb-2">
                     {category === 'male' ? 'ប្រុស (Male)' : category === 'female' ? 'ស្រី (Female)' : category === 'kids_male' ? 'ក្មេងប្រុស (Kids Male)' : 'ក្មេងស្រី (Kids Female)'}
                   </h4>
-                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+                  <div className={`grid grid-cols-3 gap-2 ${category.includes('kids') ? 'sm:grid-cols-6' : 'sm:grid-cols-7'}`}>
                     {receiveModal.sizes[category] && Object.keys(receiveModal.sizes[category]).map(size => (
                       <div key={size} className="flex flex-col">
                         <label className="text-[10px] text-center font-bold mb-1 text-gray-600">{size}</label>
@@ -3208,7 +3210,7 @@ export default function App() {
                     {['male', 'female', 'kids_male', 'kids_female'].map(category => (
                       <div key={category} className="mb-3">
                         <h4 className="text-xs font-bold text-gray-500 uppercase mb-2">{category.replace('_', ' ')}</h4>
-                        <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+                        <div className={`grid grid-cols-3 gap-2 ${category.includes('kids') ? 'sm:grid-cols-6' : 'sm:grid-cols-7'}`}>
                           {Object.keys(orderInfo.sizes[category]).map(size => (
                             <div key={size} className="flex flex-col">
                               <label className="text-[10px] text-center font-bold mb-1 text-gray-400">{size}</label>
