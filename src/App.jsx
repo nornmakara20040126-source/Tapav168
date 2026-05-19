@@ -3226,6 +3226,59 @@ export default function App() {
                         </div>
                       </div>
                     ))}
+                                        {/* Custom Items Section */}
+                    <div className="mb-3">
+                      <h4 className="text-xs font-bold text-gray-500 uppercase mb-2">ផ្សេងៗ (Other)</h4>
+                      {(orderInfo.customItems || [{ name: '', quantity: 0 }]).map((item, index) => (
+                        <div key={index} className="flex gap-2 mb-2 items-center">
+                          <input 
+                            disabled={!isAdmin} 
+                            type="text" 
+                            placeholder="ឈ្មោះអាវផ្សេងៗ..." 
+                            value={item.name} 
+                            onChange={(e) => {
+                              const newCustomItems = [...(orderInfo.customItems || [{ name: '', quantity: 0 }])];
+                              newCustomItems[index].name = e.target.value;
+                              setOrderInfo(prev => ({ ...prev, customItems: newCustomItems }));
+                            }} 
+                            className={`flex-1 p-2 border rounded text-sm outline-none ${isGeneratingPDF ? 'border-0 font-bold bg-transparent' : ''} ${!isAdmin ? 'bg-gray-50' : ''}`} 
+                          />
+                          <input 
+                            disabled={!isAdmin} 
+                            type="number" 
+                            placeholder="ចំនួន" 
+                            value={item.quantity || ''} 
+                            onChange={(e) => {
+                              const newCustomItems = [...(orderInfo.customItems || [{ name: '', quantity: 0 }])];
+                              newCustomItems[index].quantity = parseInt(e.target.value) || 0;
+                              setOrderInfo(prev => ({ ...prev, customItems: newCustomItems }));
+                            }} 
+                            className={`w-24 p-2 border rounded text-center text-sm outline-none ${isGeneratingPDF ? 'border-0 font-bold' : ''} ${item.quantity > 0 ? 'bg-blue-50 font-bold text-blue-700 border-blue-200' : 'bg-gray-50 text-gray-400'} ${!isAdmin ? 'bg-gray-50' : ''}`} 
+                            min="0" 
+                          />
+                          {isAdmin && !isGeneratingPDF && index === (orderInfo.customItems?.length || 1) - 1 && (
+                            <button 
+                              onClick={() => setOrderInfo(prev => ({ ...prev, customItems: [...(prev.customItems || [{ name: '', quantity: 0 }]), { name: '', quantity: 0 }] }))}
+                              className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                            >
+                              <PlusCircle size={18} />
+                            </button>
+                          )}
+                          {isAdmin && !isGeneratingPDF && (orderInfo.customItems?.length || 1) > 1 && (
+                            <button 
+                              onClick={() => {
+                                const newCustomItems = [...orderInfo.customItems];
+                                newCustomItems.splice(index, 1);
+                                setOrderInfo(prev => ({ ...prev, customItems: newCustomItems }));
+                              }}
+                              className="p-1 text-red-600 hover:bg-red-50 rounded"
+                            >
+                              <X size={18} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                     <div className={`flex justify-between items-center p-3 rounded-lg bg-gray-50 mt-4 ${isGeneratingPDF ? 'bg-white border-t-2 border-black rounded-none p-2' : 'print:bg-white print:border-t-2 print:border-black print:p-2'}`}><span className="font-bold text-gray-700">សរុប៖</span><span className="text-xl font-bold text-blue-700 print:text-black">{orderInfo.quantity} pcs</span></div>
                   </section>
                 </div>
