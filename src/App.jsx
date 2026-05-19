@@ -191,7 +191,7 @@ const PRESET_COLORS = [
 ];
 
 const STYLE_OPTIONS = [
-  "IND(1)", "IND(2)", "IND IAA", "3 INIAA", "3S",
+  "None", "IND(1)", "IND(2)", "IND IAA", "3 INIAA", "3S",
   "2S", "BD", "BONG TAI", "XDT", "1S",
   "3 MM(1)", "4 M", "3 MM", "2MM", "3 M"
 ];
@@ -658,7 +658,8 @@ export default function App() {
       female: { 'XS': 0, 'S': 0, 'M': 0, 'L': 0, 'XL': 0, 'XXL': 0, 'XXXL': 0 },
       kids_male: { '2': 0, '4': 0, '6': 0, '8': 0, '10': 0, '12': 0 },
       kids_female: { '2': 0, '4': 0, '6': 0, '8': 0, '10': 0, '12': 0 }
-    }
+      },
+      customItems: [{ name: '', quantity: 0 }]
   });
 
   const [stepsData, setStepsData] = useState({});
@@ -794,8 +795,11 @@ export default function App() {
     if (orderInfo.sizes.female) total += Object.values(orderInfo.sizes.female).reduce((a, b) => a + (parseInt(b) || 0), 0);
     if (orderInfo.sizes.kids_male) total += Object.values(orderInfo.sizes.kids_male).reduce((a, b) => a + (parseInt(b) || 0), 0);
     if (orderInfo.sizes.kids_female) total += Object.values(orderInfo.sizes.kids_female).reduce((a, b) => a + (parseInt(b) || 0), 0);
+    if (orderInfo.customItems) {
+      total += orderInfo.customItems.reduce((a, b) => a + (parseInt(b.quantity) || 0), 0);
+    }
     setOrderInfo(prev => ({ ...prev, quantity: total }));
-  }, [orderInfo.sizes]);
+  }, [orderInfo.sizes, orderInfo.customItems]);
 
   const stopScanner = async () => {
     const scanner = qrScannerRef.current;
@@ -2006,6 +2010,7 @@ export default function App() {
         kids_female: { '2': 0, '4': 0, '6': 0, '8': 0, '10': 0, '12': 0 }
       };
     }
+    if (!loadedOrderInfo.customItems) loadedOrderInfo.customItems = [{ name: '', quantity: 0 }];
     setOrderInfo(loadedOrderInfo);
     const mergedSpecs = { ...DEFAULT_SPECS, ...(order.specs || {}) };
     if (!mergedSpecs.colorName) {
@@ -2051,7 +2056,8 @@ export default function App() {
         female: { 'XS': 0, 'S': 0, 'M': 0, 'L': 0, 'XL': 0, 'XXL': 0, 'XXXL': 0 },
         kids_male: { '2': 0, '4': 0, '6': 0, '8': 0, '10': 0, '12': 0 },
         kids_female: { '2': 0, '4': 0, '6': 0, '8': 0, '10': 0, '12': 0 }
-      }
+      },
+      customItems: [{ name: '', quantity: 0 }]
     });
     setSpecs({ ...DEFAULT_SPECS });
     setStepsData({}); setImageCount(1); setUploadedImages([null]); setViewMode('form');
